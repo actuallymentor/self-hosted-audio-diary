@@ -14,40 +14,26 @@ The archive remains the product. SQLite, search, transcripts, summaries, and AI
 outputs enhance ordinary files; they never become the only copy of canonical
 diary content.
 
-## Preflight: human input required
+## Resolved deployment decisions
 
-Resolve these before the implementation run. They change live acceptance or
-deployment and have no safe universal answer.
-
-1. **Deployment hardware** — CPU architecture/core count, RAM, NVIDIA GPU model,
-   VRAM, and NVIDIA Container Toolkit availability. Default without an answer:
-   CPU-only, `faster-whisper` `small`, INT8, `linux/amd64` and `linux/arm64` app
-   images in CI; local verification builds only the host-native architecture.
-2. **Language behavior** — whether one recording commonly switches between
-   English and Dutch. Default: automatic language selection per recording;
-   separate English and Dutch acceptance fixtures.
-3. **OpenRouter** — exact model and whether Zero Data Retention-only routing is
-   mandatory. Default: no model guess; fail preflight if live reflection testing
-   is requested without a configured model and funded key.
-4. **TTS** — provider, API base URL, model, and voice. Default: ship the provider
-   interface disabled; TTS is not a core-run blocker when explicitly deferred.
-5. **Production origin** — exact external HTTPS URL. Default for local tests:
-   `http://127.0.0.1:3000`.
-6. **Docker Hub** — namespace/repository and whether both app and transcription
-   images should publish. Default: publish both images after credentials exist.
-7. **Device gate** — access to one real iPhone running Safari and one Android
-   phone running Chrome, or device-cloud credentials. Desktop emulation cannot
-   prove mobile recording lifecycle behavior. Android may reach the local secure
-   context through `adb reverse`; iPhone requires a real trusted TLS origin such
-   as the production reverse proxy or Tailscale Serve. A LAN-IP HTTP URL cannot
-   exercise microphone, service-worker, install, or wake-lock behavior.
-8. **Model provisioning** — whether the pinned transcription model may download
-   on first start or must be bundled for an offline deployment. Default: download
-   once into a persistent cache, and prewarm that cache during verification.
-
-The invitation flow, deletion behavior, backend, database, transcript edits,
-and filesystem names use the conservative defaults below. They do not need a
-separate decision.
+- Primary deployment: x86-64 Intel NUC, 16 GiB RAM, Intel integrated graphics,
+  no NVIDIA GPU.
+- Publish both images for `linux/amd64` and `linux/arm64`; exercise the primary
+  `linux/amd64` target on every run and smoke-test ARM64 on a native CI runner.
+- Transcribe on CPU. CTranslate2 does not use the Intel integrated GPU, and speed
+  is secondary to output quality.
+- Use multilingual `faster-whisper` `large-v3` with INT8, automatic language
+  detection, and code-switching enabled. English is primary; Dutch and other
+  languages may occur within the same recording.
+- Download the pinned model on first start into a persistent cache. Verification
+  prewarms it. Recordings remain available while a cold download is in progress.
+- Use OpenRouter for both reflection and text-to-speech. One OpenRouter API key
+  authenticates both features; separate model/voice values select behavior.
+- Physical mobile testing is deferred until after the first preview Docker images
+  publish. Automated Chrome mobile/PWA gates remain mandatory before publication;
+  owner iOS/Android results gate the stable `1.0.0` release.
+- Invitation flow, deletion behavior, backend, database, transcript edits, and
+  filesystem names use the conservative defaults below.
 
 ## Credentials and external setup
 
@@ -57,6 +43,7 @@ Create `.env` from the generated `.env.example`. Never commit `.env`.
 # Bind mounts on the Docker host
 APP_DATA_PATH=./runtime/app
 DIARY_DATA_PATH=./runtime/diary
+TRANSCRIPTION_MODEL_CACHE_PATH=./runtime/models
 APP_UID=10001
 APP_GID=10001
 
@@ -67,38 +54,82 @@ TRUST_PROXY=false
 # Local speech-to-text
 TRANSCRIPTION_BACKEND=faster-whisper
 TRANSCRIPTION_URL=http://transcription:8000/v1
-TRANSCRIPTION_MODEL=small
+TRANSCRIPTION_MODEL=large-v3
 TRANSCRIPTION_MODEL_REVISION=<pinned-revision>
 TRANSCRIPTION_DEVICE=cpu
 TRANSCRIPTION_COMPUTE_TYPE=int8
 TRANSCRIPTION_LANGUAGE=auto
+TRANSCRIPTION_MULTILINGUAL=true
+TRANSCRIPTION_CPU_THREADS=auto
+TRANSCRIPTION_VAD_FILTER=true
 HF_TOKEN=
 
-# Reflection
+# Reflection and TTS use one OpenRouter account/key
 OPENROUTER_API_KEY=
-OPENROUTER_MODEL=
+OPENROUTER_MODEL=anthropic/claude-sonnet-4.6
 OPENROUTER_ZDR_ONLY=true
 OPENROUTER_SITE_URL=
 
-# Optional text-to-speech
-TTS_PROVIDER=disabled
-TTS_API_BASE_URL=
-TTS_API_KEY=
-TTS_MODEL=
-TTS_VOICE=
+# Text-to-speech through OpenRouter
+TTS_PROVIDER=openrouter
+TTS_MODEL=google/gemini-3.1-flash-tts-preview
+TTS_VOICE=Sulafat
+TTS_RESPONSE_FORMAT=mp3
 
 # Live verification switches
 RUN_OPENROUTER_TESTS=false
 RUN_TTS_TESTS=false
+
+# Image publishing; never passed into application containers
+DOCKERHUB_USERNAME=
+DOCKERHUB_TOKEN=
+DOCKERHUB_APP_IMAGE=<dockerhub-namespace>/self-hosted-audio-diary
+DOCKERHUB_TRANSCRIBER_IMAGE=<dockerhub-namespace>/self-hosted-audio-diary-transcriber
+
+# Optional: lets automation copy Docker Hub values into GitHub Actions secrets
+GH_TOKEN=
 ```
 
-Local `.env` cannot configure hosted GitHub Actions. Add these in the GitHub
-repository settings before exercising image publication:
+Most values are not required to begin development:
 
-- Actions variable `DOCKERHUB_IMAGE`, for example `owner/shad`.
+- `APP_ORIGIN=http://127.0.0.1:3000` is sufficient for local development. The
+  production HTTPS origin is needed only for deployment-time cookie/Origin checks,
+  reverse-proxy correctness, PWA APIs on non-localhost devices, and optional
+  OpenRouter attribution.
+- `OPENROUTER_API_KEY` is unnecessary for archive/auth/recording/search work. It
+  becomes required for real reflection and TTS tests; without it those features
+  can be implemented and contract-tested but cannot be declared live-tested.
+- Set `RUN_OPENROUTER_TESTS=true` and `RUN_TTS_TESTS=true` in the private `.env`
+  once the key is present. `.env.example` keeps both false for credential-free work.
+- `OPENROUTER_MODEL` is separate because an API key authenticates an account but
+  does not choose which model should answer. The configured default is a strong,
+  long-context reflection model and remains runtime-configurable.
+- `OPENROUTER_ZDR_ONLY=true` restricts diary text to provider endpoints that claim
+  zero data retention. It is a privacy control, not a development requirement.
+- The Docker Hub and optional `GH_TOKEN` values are needed only when publishing.
+  Local multi-architecture builds do not require registry credentials.
+- Compose services use explicit `environment:` allowlists and never use `.env` as
+  a service-level `env_file`. Registry/GitHub credentials must not enter any container;
+  `HF_TOKEN` may enter only the transcription service when it is non-empty.
+
+`.env` itself cannot configure hosted GitHub Actions. Before publication,
+automation uses `GH_TOKEN` with repository Secrets and Variables write permission
+to copy these values into repository configuration:
+
+- Actions variables `DOCKERHUB_APP_IMAGE` and `DOCKERHUB_TRANSCRIBER_IMAGE`.
 - Actions secret `DOCKERHUB_USERNAME`.
 - Actions secret `DOCKERHUB_TOKEN`; use a scoped access token, not a password.
-- A second image name variable if the transcription image publishes separately.
+
+There are two published images because the product brief deliberately isolates
+local speech inference from the main application:
+
+1. `self-hosted-audio-diary`: React assets, Fastify API, jobs, SQLite, and search.
+2. `self-hosted-audio-diary-transcriber`: FFmpeg, Python/CTranslate2,
+   `faster-whisper`, and the pinned local model runtime.
+
+Users still deploy one Compose stack with one command. Keeping inference separate
+prevents its native/Python dependencies and model lifecycle from bloating or
+destabilizing the main application image.
 
 The repository remote is already
 `git@github.com:actuallymentor/self-hosted-audio-diary.git`. Add `.ssh_key.pub` as
@@ -130,9 +161,11 @@ Do not push until the human explicitly requests a push.
   loses almost no diary content.
 - App-data and diary-data mounts are independently configurable and may be on
   different filesystems.
+- App and transcription image manifests contain tested `linux/amd64` and
+  `linux/arm64` variants; Intel NUC `linux/amd64` is the primary deployment.
 - Version in `package.json`, API, UI, OCI labels, Git tag, and Docker tag agrees.
-- All automated gates pass; real iPhone/Android checks are recorded before a
-  production release.
+- All automated gates pass before the first preview images publish. Owner
+  iPhone/Android results are recorded and resolved before stable `1.0.0`.
 
 ## Fixed technology choices
 
@@ -162,8 +195,11 @@ Do not push until the human explicitly requests a push.
 
 - A separate `faster-whisper` HTTP container behind an engine-neutral,
   OpenAI-style transcription contract.
-- CPU default: `small` with INT8. NVIDIA quality default after hardware approval:
-  `large-v3-turbo` with float16.
+- Primary model: multilingual `large-v3` with INT8 on x86-64 CPU. Enable automatic
+  language detection and code-switching; leave one CPU thread available to the
+  app unless measurement supports another setting.
+- The Intel integrated GPU remains unused in v1: CTranslate2's supported GPU path
+  targets NVIDIA CUDA. Quality matters more than transcription latency here.
 - Optional alternative: Parakeet TDT 0.6B v3 through NeMo-Speech.cpp, using the
   same external contract.
 - FFmpeg/ffprobe for validation and derived 16 kHz mono FLAC transcription input.
@@ -247,6 +283,11 @@ Deployment docs tell the operator to pre-create/chown host directories when they
 use a different UID/GID. `scripts/verify` pre-creates isolated mounts with the
 configured IDs. The transcription model cache receives the same treatment before
 its process drops privileges.
+
+Compose variable interpolation and container environments are separate concerns.
+Every service lists only the variables it consumes. The verification script
+inspects `/proc/1/environ` in running containers and fails if publishing tokens
+appear anywhere, or if `HF_TOKEN` appears outside the transcriber.
 
 ## Durable archive contract
 
@@ -524,9 +565,15 @@ message, without Co-Authored-By lines.
 - Validate required human inputs, `.env`, Docker access, disk space, CPU/GPU, model
   cache space, ports, remote, and deploy-key read access.
 - Snapshot `git status`; preserve all pre-existing human changes.
+- Query the current OpenRouter Models API and official runtime/model sources to
+  verify configured reflection/TTS slugs, TTS voice, CTranslate2 architectures,
+  model revision, and download URLs. Fail with a replacement instruction when a
+  preview model has disappeared; never silently switch providers/models.
+- Render Compose configuration and assert every service has an explicit
+  environment allowlist. Reject any service-level `env_file: .env`.
 - Add `.nvmrc`, package metadata, `.env.example`, scripts, and documentation.
 - Gate: no secret tracked; Compose interpolation succeeds; clean test directories
-  are explicit and safe to remove.
+  are explicit and safe to remove; publishing credentials cannot reach containers.
 
 ### Phase 1 — scaffold and production skeleton
 
@@ -558,6 +605,9 @@ message, without Co-Authored-By lines.
 - Implement chunk protocol, server staging/finalization, Dexie schema/outbox,
   MediaRecorder capability selection, upload-part coalescing, wake lock, status UI,
   quota handling, expired-session pause, and 30-day staging cleanup.
+- Request approximately 128 kbit/s audio with `audioBitsPerSecond` for Opus/AAC
+  where supported, retain the browser's native result, and degrade gracefully when
+  a browser ignores the bitrate hint.
 - Gate: duplicate/out-of-order chunks, hash mismatch, connection loss, app restart,
   server restart, slow network, and near-full disk paths behave without duplicates
   or source loss.
@@ -576,9 +626,19 @@ message, without Co-Authored-By lines.
 
 - Implement engine-neutral adapter, faster-whisper container, durable job leases,
   derived normalization, transcript provenance, retry/dead-letter UI, manual edits.
-- Gate: configured real model transcribes licensed English and Dutch fixtures via
-  the normal recording/upload/job path; recognizable phrases pass tolerant checks;
-  forced worker failure preserves audio; retranscription preserves manual text.
+- Pass the pinned revision to faster-whisper's revision-aware model loader, record
+  the resolved snapshot commit, and refuse a mismatch. Map
+  `TRANSCRIPTION_CPU_THREADS=auto` to physical CPU cores minus one, minimum one.
+- Enable VAD by default to reduce silence hallucinations. Compare representative
+  English-only output with per-segment multilingual detection on and off; keep
+  code-switching quality without accepting a material monolingual regression.
+  `large-v2` or recording-level language detection is an allowed measured fallback,
+  never a silent downgrade.
+- Gate: real `large-v3` INT8 transcribes licensed English, Dutch, and mixed-language
+  fixtures through the normal recording/upload/job path; recognizable phrases pass
+  tolerant checks; forced worker failure preserves audio; retranscription preserves
+  manual text. Record cold-download size/time and steady-state NUC throughput
+  without making speed a pass/fail quality proxy.
 
 ### Phase 7 — search and recovery
 
@@ -605,12 +665,19 @@ message, without Co-Authored-By lines.
 ### Phase 10 — operations and release automation
 
 - Add dev/test/prod Compose profiles, health/readiness, log levels, migrations,
-  version labels, backup/reconciliation docs, and CI.
+  version labels, backup/reconciliation docs, README quickstart/Compose example,
+  bind-mount ownership guidance, and CI.
 - CI runs lint, focused tests, production build, Docker integration, browser E2E,
-  and a CPU transcription smoke using the real small model.
+  and a CPU transcription smoke using the real model.
 - Cache the transcription model directory by backend/model/pinned revision in CI.
-  Use robust Dutch fixture phrases and tolerant word-level assertions suitable for
-  the CPU `small` model; never assert punctuation verbatim.
+  Use robust multilingual fixture phrases and tolerant word-level assertions;
+  never assert punctuation verbatim.
+- Build app and transcription images separately on native amd64 and ARM64 runners,
+  test each native artifact, then merge digests into multi-architecture manifests.
+  QEMU-only build success is insufficient proof for native inference dependencies.
+- Budget model and Docker caches explicitly within repository CI limits. A cache
+  miss performs a bounded cold pinned-model download and reports progress; cache
+  eviction is not a flaky test failure by itself.
 - Release runs only for a published `vX.Y.Z` GitHub release; abort unless the tag
   equals `v${package.version}` and tests/build pass. Publish exact SemVer and
   `latest`, never rolling major/minor tags. Pin Actions by commit SHA.
@@ -631,21 +698,25 @@ Run `./scripts/verify`. It must:
 7. run live OpenRouter/TTS tests when switches and credentials are present;
 8. restart services during upload/job work;
 9. exercise index/database disaster recovery;
-10. print archive tree, `ffprobe` results, versions, and test summary;
-11. tear down on success, preserving redacted artifacts and volumes on failure.
+10. inspect running container environments and fail on registry/GitHub secret
+    leakage or misplaced `HF_TOKEN`;
+11. print archive tree, `ffprobe` results, versions, and test summary;
+12. tear down on success, preserving redacted artifacts and volumes on failure.
 
 Gate: two consecutive clean-volume runs pass. Inspect browser flows as a user, not
 only assertions: click record/stop, observe states, play/seek, search, navigate,
 reflect, reload, go offline, close/reopen, and update the PWA.
 
-### Phase 12 — mobile hardware and handoff
+### Phase 12 — preview publication and owner mobile handoff
 
-- Real iPhone Safari: native AAC/MP4 fallback, install/relaunch, offline recording,
-  screen lock/background lifecycle, interruption, quota warning, reconnect sync.
-- Real Android Chrome: WebM/Opus, install/relaunch, wake lock, network handoff,
-  interruption, background/resume sync.
-- Record devices/browser versions and outcomes. Browser emulation remains useful
-  but cannot replace this gate.
+- Publish the first reviewed multi-architecture images as a SemVer `0.x` preview
+  after all automated gates pass.
+- Give the owner an exact Compose example and test script for iPhone Safari and
+  Android Chrome: install/relaunch, native codec, offline recording, screen lock,
+  interruption, quota warning, network handoff, reconnect, and background sync.
+- Record devices/browser versions and owner outcomes as release evidence. Fix
+  device findings before stable `1.0.0`; browser emulation never becomes evidence
+  that physical lifecycle behavior works.
 - Run reflect, style, changelog/version, complete tests, cleanup, commits,
   phone-a-friend review, and human notification.
 
@@ -728,5 +799,8 @@ reflect, reload, go offline, close/reopen, and update the PWA.
 - [Vite PWA update behavior](https://vite-pwa-org.netlify.app/guide/auto-update)
 - [Node 24 SQLite status](https://nodejs.org/download/release/latest-v24.x/docs/api/sqlite.html)
 - [OpenRouter quickstart](https://openrouter.ai/docs/quickstart)
+- [OpenRouter text-to-speech](https://openrouter.ai/docs/guides/overview/multimodal/tts)
+- [OpenRouter Zero Data Retention](https://openrouter.ai/docs/guides/features/zdr)
+- [Gemini TTS languages and voices](https://ai.google.dev/gemini-api/docs/speech-generation)
 - [GitHub Docker image publishing](https://docs.github.com/en/actions/tutorials/publish-packages/publish-docker-images)
 - [Docker multi-platform GitHub Actions](https://docs.docker.com/build/ci/github-actions/multi-platform/)
