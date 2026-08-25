@@ -142,8 +142,9 @@ Verify access without changing global SSH configuration:
 GIT_SSH_COMMAND='ssh -i /workspace/.ssh_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new' \
     git ls-remote origin
 
+DEPLOY_KEY_CHECK_REF="refs/heads/deploy-key-write-check-$(git rev-parse --short HEAD)"
 GIT_SSH_COMMAND='ssh -i /workspace/.ssh_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new' \
-    git push --dry-run origin HEAD:refs/heads/main
+    git push --dry-run origin HEAD:"$DEPLOY_KEY_CHECK_REF"
 ```
 
 Do not push until the human explicitly requests a push.
