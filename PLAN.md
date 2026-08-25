@@ -74,7 +74,7 @@ OPENROUTER_SITE_URL=
 TTS_PROVIDER=openrouter
 TTS_MODEL=google/gemini-3.1-flash-tts-preview
 TTS_VOICE=Sulafat
-TTS_RESPONSE_FORMAT=mp3
+TTS_RESPONSE_FORMAT=pcm
 
 # Live verification switches
 RUN_OPENROUTER_TESTS=false
@@ -85,9 +85,6 @@ DOCKERHUB_USERNAME=
 DOCKERHUB_TOKEN=
 DOCKERHUB_APP_IMAGE=<dockerhub-namespace>/self-hosted-audio-diary
 DOCKERHUB_TRANSCRIBER_IMAGE=<dockerhub-namespace>/self-hosted-audio-diary-transcriber
-
-# Optional: lets automation copy Docker Hub values into GitHub Actions secrets
-GH_TOKEN=
 ```
 
 Most values are not required to begin development:
@@ -106,15 +103,14 @@ Most values are not required to begin development:
   long-context reflection model and remains runtime-configurable.
 - `OPENROUTER_ZDR_ONLY=true` restricts diary text to provider endpoints that claim
   zero data retention. It is a privacy control, not a development requirement.
-- The Docker Hub and optional `GH_TOKEN` values are needed only when publishing.
-  Local multi-architecture builds do not require registry credentials.
+- Docker Hub values are needed only when publishing. Local multi-architecture
+  builds do not require registry credentials.
 - Compose services use explicit `environment:` allowlists and never use `.env` as
   a service-level `env_file`. Registry/GitHub credentials must not enter any container;
   `HF_TOKEN` may enter only the transcription service when it is non-empty.
 
-`.env` itself cannot configure hosted GitHub Actions. Before publication,
-automation uses `GH_TOKEN` with repository Secrets and Variables write permission
-to copy these values into repository configuration:
+The authenticated GitHub CLI has already copied the publication values into
+repository Actions configuration:
 
 - Actions variables `DOCKERHUB_APP_IMAGE` and `DOCKERHUB_TRANSCRIBER_IMAGE`.
 - Actions secret `DOCKERHUB_USERNAME`.
@@ -131,13 +127,12 @@ Users still deploy one Compose stack with one command. Keeping inference separat
 prevents its native/Python dependencies and model lifecycle from bloating or
 destabilizing the main application image.
 
-The repository remote is already
-`git@github.com:actuallymentor/self-hosted-audio-diary.git`. Add `.ssh_key.pub` as
-a write-enabled deploy key at the repository's **Settings → Deploy keys** page.
-The private `.ssh_key` is mode `0600`, ignored by Git, and must not be copied to
-`.env` or GitHub.
+The repository remote is
+`git@github.com:actuallymentor/self-hosted-audio-diary.git`. Its write-enabled
+deploy key is installed and verified. The private `.ssh_key` is mode `0600`,
+ignored by Git, and must not be copied to `.env` or GitHub.
 
-After the key is added, verify access without changing global SSH configuration:
+Verify access without changing global SSH configuration:
 
 ```bash
 GIT_SSH_COMMAND='ssh -i /workspace/.ssh_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new' \
@@ -550,9 +545,12 @@ source checksum, prompt version, provider, and model. OpenRouter failure leaves
 the diary untouched and creates a retryable job. Require explicit UI disclosure
 that selected diary text leaves the server; support ZDR-only provider routing.
 
-TTS consumes only the saved reflection answer through a provider adapter. Save
-generated audio as derived content next to the reflection. Missing configuration
-shows **Listen unavailable** rather than breaking reflection.
+TTS consumes only the saved reflection answer through a provider adapter. Gemini
+3.1 Flash TTS on OpenRouter accepts `pcm`, not `mp3`; wrap its raw 24 kHz mono
+16-bit PCM response in a WAV container, then transcode it to MP3 for compact,
+broadly compatible browser playback. Save generated audio next to the reflection.
+Missing configuration shows **Listen unavailable** rather than breaking
+reflection.
 
 ## One-run execution sequence
 
@@ -563,7 +561,7 @@ message, without Co-Authored-By lines.
 ### Phase 0 — preflight and baseline
 
 - Validate required human inputs, `.env`, Docker access, disk space, CPU/GPU, model
-  cache space, ports, remote, and deploy-key read access.
+  cache space, ports, remote, and deploy-key read/write access without pushing.
 - Snapshot `git status`; preserve all pre-existing human changes.
 - Query the current OpenRouter Models API and official runtime/model sources to
   verify configured reflection/TTS slugs, TTS voice, CTranslate2 architectures,
