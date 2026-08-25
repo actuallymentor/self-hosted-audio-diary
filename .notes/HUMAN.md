@@ -10,6 +10,10 @@
 - A pinned transcription model may download on first start into persistent cache.
 - Use one OpenRouter key for reflection and OpenRouter TTS; model and voice remain
   independently configurable.
+- The application exposes plain HTTP only. The owner's reverse proxy owns the
+  public origin, DNS, TLS, HTTPS redirects, certificates, and external security
+  headers; the implementation must not require public-origin configuration or add
+  HTTPS handling.
 - Physical mobile testing follows the first published preview images. Owner will
   test devices; results gate stable `1.0.0`, not the initial preview.
 - Publish separate app and transcription images in one Compose stack.
@@ -31,6 +35,4 @@
 
 ## Still needed
 
-- Set the production `APP_ORIGIN` when the deployed HTTPS hostname is known; the
-  localhost default is sufficient for development. Physical iPhone testing needs
-  that trusted HTTPS route; LAN-IP HTTP is not a valid PWA/microphone test origin.
+- No human input is required before implementation.

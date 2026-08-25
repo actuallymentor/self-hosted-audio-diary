@@ -29,6 +29,9 @@ diary content.
   prewarms it. Recordings remain available while a cold download is in progress.
 - Use OpenRouter for both reflection and text-to-speech. One OpenRouter API key
   authenticates both features; separate model/voice values select behavior.
+- Expose the application over plain HTTP only. The operator's reverse proxy owns
+  the public origin, DNS, TLS, HTTPS redirects, certificates, and external security
+  headers; none of those are application implementation or release gates.
 - Physical mobile testing is deferred until after the first preview Docker images
   publish. Automated Chrome mobile/PWA gates remain mandatory before publication;
   owner iOS/Android results gate the stable `1.0.0` release.
@@ -47,9 +50,8 @@ TRANSCRIPTION_MODEL_CACHE_PATH=./runtime/models
 APP_UID=10001
 APP_GID=10001
 
-# Public application boundary
-APP_ORIGIN=http://127.0.0.1:3000
-TRUST_PROXY=false
+# Plain HTTP listener
+APP_PORT=3000
 
 # Local speech-to-text
 TRANSCRIPTION_BACKEND=faster-whisper
@@ -68,7 +70,6 @@ HF_TOKEN=
 OPENROUTER_API_KEY=
 OPENROUTER_MODEL=anthropic/claude-sonnet-4.6
 OPENROUTER_ZDR_ONLY=true
-OPENROUTER_SITE_URL=
 
 # Text-to-speech through OpenRouter
 TTS_PROVIDER=openrouter
@@ -89,10 +90,8 @@ DOCKERHUB_TRANSCRIBER_IMAGE=<dockerhub-namespace>/self-hosted-audio-diary-transc
 
 Most values are not required to begin development:
 
-- `APP_ORIGIN=http://127.0.0.1:3000` is sufficient for local development. The
-  production HTTPS origin is needed only for deployment-time cookie/Origin checks,
-  reverse-proxy correctness, PWA APIs on non-localhost devices, and optional
-  OpenRouter attribution.
+- `APP_PORT=3000` controls only the container's plain HTTP listener. The app does
+  not configure or validate the operator-owned public origin or TLS path.
 - `OPENROUTER_API_KEY` is unnecessary for archive/auth/recording/search work. It
   becomes required for real reflection and TTS tests; without it those features
   can be implemented and contract-tested but cannot be declared live-tested.
@@ -154,6 +153,9 @@ Do not push until the human explicitly requests a push.
 - `./scripts/verify` performs preflight, production image builds, Compose startup,
   migrations, tests, browser journeys, recovery checks, artifact collection, and
   teardown in one command.
+- The app listens on its configured plain HTTP port, ships no TLS keys,
+  certificates, redirect middleware, or public-origin configuration, and passes
+  browser tests directly at `http://127.0.0.1:${APP_PORT}`.
 - The app remains usable when OpenRouter, TTS, or transcription is unavailable.
 - An offline recording survives closing and reopening the installed PWA, then
   synchronizes exactly once when connectivity returns.
@@ -275,9 +277,11 @@ React component names and files remain PascalCase.
 ```
 
 The production Node image builds Vite assets in one stage, then runs Fastify as
-a non-root user in the final stage. Fastify serves `/dist` and the same-origin
-API. The transcription image remains separate. Development/test-only services
-do not change the production one-app-container rule.
+a non-root user in the final stage. Fastify listens on `0.0.0.0:${APP_PORT}` over
+plain HTTP and serves `/dist` plus the same-origin API. It does not terminate TLS,
+redirect HTTP to HTTPS, provision certificates, or configure a public hostname.
+The transcription image remains separate. Development/test-only services do not
+change the production one-app-container rule.
 
 Bind-mount ownership is explicit. A narrow root entrypoint creates only known
 subdirectories under `/data/app` and `/data/diary`, checks ownership/write access,
@@ -398,9 +402,11 @@ reader; unknown newer versions fail safely without rewriting files.
   sharing. No SMTP dependency.
 - Hash passwords with Argon2id using parameters recorded with the hash.
 - Generate 256-bit opaque sessions. Store only a SHA-256 digest server-side.
-- Cookie: `HttpOnly`, `Secure` in production, `SameSite=Lax`, narrow path, bounded
-  lifetime, rotation on login and password changes.
-- Check configured Origin on every unsafe request; no permissive CORS.
+- Cookie: `HttpOnly`, `SameSite=Lax`, narrow path, bounded lifetime, rotation on
+  login and password changes. The reverse proxy owns external `Secure`/HSTS policy.
+- Keep the API same-origin with no permissive CORS. Require a session-bound CSRF
+  token and reject cross-site Fetch Metadata on every unsafe request; no configured
+  public origin is required.
 - Rate-limit login/invite consumption without leaking whether an email exists.
 - Derive user ownership from the session at every archive/database boundary.
 - Media endpoints authenticate and support HTTP Range without exposing real paths.
@@ -587,13 +593,14 @@ message, without Co-Authored-By lines.
 - Install `mentie`, inspect its exports, install preferred libraries, run Airier.
 - Add multi-stage app image, transcription image, Compose health checks, separate
   mounts, non-root runtime, and graceful shutdown.
-- Gate: production images build; empty Compose stack becomes healthy; Fastify
-  serves the compiled PWA and `/version` matches `package.json`.
+- Gate: production images build; empty Compose stack becomes healthy over direct
+  loopback HTTP; Fastify serves the compiled PWA and `/version` matches
+  `package.json`; no TLS or public-origin configuration ships.
 
 ### Phase 2 — archive, database, and authentication vertical slice
 
 - Implement migrations, archive confinement/atomic-write primitives, and schemas.
-- Implement first-admin claim, invite registration, sessions, origin/rate checks.
+- Implement first-admin claim, invite registration, sessions, CSRF/rate checks.
 - Create Today shell and login/bootstrap/admin invite pages.
 - Gate: integration tests cover first-admin race, invite expiry/reuse, session
   rotation, traversal attempts, and two-user isolation through real SQLite/files.
@@ -696,11 +703,12 @@ Run `./scripts/verify`. It must:
 
 1. create explicit isolated app/diary directories;
 2. build production images from a cold cache where practical;
-3. start Compose and wait on readiness;
+3. start Compose, verify the plain HTTP listener, and wait on readiness;
 4. run unit/integration suites inside the app build environment;
 5. load the real transcription model;
-6. run Puppeteer in the Compose `test_runner` service with browser-console/network
-   capture and screenshots;
+6. run Puppeteer in the Compose `test_runner` service against the app service's
+   direct `http://app:${APP_PORT}` origin, with browser-console/network capture
+   and screenshots;
 7. run live OpenRouter/TTS tests when switches and credentials are present;
 8. restart services during upload/job work;
 9. exercise index/database disaster recovery;
@@ -720,10 +728,9 @@ reflect, reload, go offline, close/reopen, and update the PWA.
 - Give the owner an exact Compose example and test script for iPhone Safari and
   Android Chrome: install/relaunch, native codec, offline recording, screen lock,
   interruption, quota warning, network handoff, reconnect, and background sync.
-- The iPhone test URL must use trusted HTTPS through the production reverse proxy,
-  Tailscale Serve, or an equivalent TLS route; a LAN-IP HTTP URL cannot exercise
-  microphone, service-worker, install, or wake-lock APIs. Android may use the same
-  HTTPS origin or `adb reverse` to its localhost secure context.
+- The owner supplies the device-test URL through their existing reverse proxy.
+  Proxy, origin, DNS, certificate, and TLS behavior are outside this project's test
+  scope; the application container remains plain HTTP throughout.
 - Record devices/browser versions and owner outcomes as release evidence. Fix
   device findings before stable `1.0.0`; browser emulation never becomes evidence
   that physical lifecycle behavior works.
@@ -742,7 +749,7 @@ reflect, reload, go offline, close/reopen, and update the PWA.
 
 ### Docker integration tests
 
-- First-admin concurrency; invite/session/auth/rate/origin behavior.
+- First-admin concurrency; invite/session/auth/rate/CSRF behavior.
 - Empty database plus populated archive refuses first-admin bootstrap and requires
   the account-recovery flow.
 - User isolation for every route, file, job, search row, and error message.
@@ -782,7 +789,8 @@ reflect, reload, go offline, close/reopen, and update the PWA.
 ## Known limits to communicate honestly
 
 - Browsers may suspend capture or sync; Background Sync is best-effort and not
-  broadly available. Wake Lock requires a visible secure context.
+  broadly available. Any secure browser context required on physical devices is
+  supplied by the operator's infrastructure, outside the plain-HTTP app contract.
 - IndexedDB may be evicted even after requesting persistence. Warn; never label
   device-only content as server-safe.
 - Emitted chunks can survive reload. Audio not yet emitted by a destroyed recorder
