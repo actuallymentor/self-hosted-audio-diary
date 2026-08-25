@@ -8,5 +8,6 @@
 - TTS provider/model/voice/key, or confirmation that configured-off is acceptable.
 - Production HTTPS origin.
 - Docker Hub image namespace/repository and publish scope; Actions credentials belong in GitHub secrets.
-- Real iPhone/Android or device-cloud availability for the release gate.
+- Real iPhone/Android or device-cloud availability for the release gate, including
+  a trusted TLS route to the iPhone.
 - Add `.ssh_key.pub` as a write-enabled GitHub deploy key.
