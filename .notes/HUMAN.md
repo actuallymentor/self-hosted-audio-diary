@@ -20,7 +20,8 @@
   variables; a separate `GH_TOKEN` in `.env` is unnecessary in this workspace.
 - GitHub Actions contains `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` as secrets,
   plus `DOCKERHUB_APP_IMAGE` and `DOCKERHUB_TRANSCRIBER_IMAGE` as variables.
-- GitHub Actions is enabled with all actions allowed; the default workflow token
+- GitHub Actions permits only GitHub-owned actions and verified Marketplace
+  creators, and requires full commit-SHA pinning. The default workflow token
   remains read-only and cannot approve pull requests.
 - OpenRouter authentication and a live ZDR Claude Sonnet 4.6 request passed.
   Gemini 3.1 Flash TTS with the Sulafat voice also passed with ZDR when requesting

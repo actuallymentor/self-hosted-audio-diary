@@ -116,6 +116,10 @@ repository Actions configuration:
 - Actions secret `DOCKERHUB_USERNAME`.
 - Actions secret `DOCKERHUB_TOKEN`; use a scoped access token, not a password.
 
+Repository Actions policy permits only GitHub-owned actions and verified
+Marketplace creators, and requires every action reference to use a full commit
+SHA. The default workflow token is read-only and cannot approve pull requests.
+
 There are two published images because the product brief deliberately isolates
 local speech inference from the main application:
 
@@ -137,6 +141,9 @@ Verify access without changing global SSH configuration:
 ```bash
 GIT_SSH_COMMAND='ssh -i /workspace/.ssh_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new' \
     git ls-remote origin
+
+GIT_SSH_COMMAND='ssh -i /workspace/.ssh_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new' \
+    git push --dry-run origin HEAD:refs/heads/main
 ```
 
 Do not push until the human explicitly requests a push.
