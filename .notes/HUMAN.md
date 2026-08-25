@@ -4,6 +4,7 @@
 
 - Deployment CPU architecture/core count, RAM, GPU/VRAM, and NVIDIA toolkit availability.
 - Whether single recordings commonly mix English and Dutch.
+- Whether first-start transcription model download is acceptable.
 - OpenRouter model, API key, and Zero Data Retention requirement.
 - TTS provider/model/voice/key, or confirmation that configured-off is acceptable.
 - Production HTTPS origin.

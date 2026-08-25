@@ -41,6 +41,9 @@ deployment and have no safe universal answer.
    context through `adb reverse`; iPhone requires a real trusted TLS origin such
    as the production reverse proxy or Tailscale Serve. A LAN-IP HTTP URL cannot
    exercise microphone, service-worker, install, or wake-lock behavior.
+8. **Model provisioning** — whether the pinned transcription model may download
+   on first start or must be bundled for an offline deployment. Default: download
+   once into a persistent cache, and prewarm that cache during verification.
 
 The invitation flow, deletion behavior, backend, database, transcript edits,
 and filesystem names use the conservative defaults below. They do not need a
