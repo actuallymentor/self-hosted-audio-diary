@@ -155,7 +155,9 @@ Do not push until the human explicitly requests a push.
   teardown in one command.
 - The app listens on its configured plain HTTP port, ships no TLS keys,
   certificates, redirect middleware, or public-origin configuration, and passes
-  browser tests directly at `http://127.0.0.1:${APP_PORT}`.
+  browser tests against the direct `http://app:${APP_PORT}` Compose origin. The
+  test-only Chrome runner explicitly treats that origin as secure so PWA and media
+  APIs can be exercised without adding HTTPS to the app.
 - The app remains usable when OpenRouter, TTS, or transcription is unavailable.
 - An offline recording survives closing and reopening the installed PWA, then
   synchronizes exactly once when connectivity returns.
@@ -405,9 +407,12 @@ reader; unknown newer versions fail safely without rewriting files.
 - Cookie: `HttpOnly`, `SameSite=Lax`, narrow path, bounded lifetime, rotation on
   login and password changes. The reverse proxy owns external `Secure`/HSTS policy.
 - Keep the API same-origin with no permissive CORS. Require a session-bound CSRF
-  token and reject cross-site Fetch Metadata on every unsafe request; no configured
-  public origin is required.
-- Rate-limit login/invite consumption without leaking whether an email exists.
+  token on every unsafe request. Reject cross-site Fetch Metadata when those
+  headers are present; absence is allowed because the CSRF token is primary. No
+  configured public origin is required.
+- Rate-limit login and invite consumption with global plus hashed submitted
+  identifier/token buckets and bounded delays. Never depend on client IP or trust
+  forwarding headers; never leak whether an email exists or hard-lock an account.
 - Derive user ownership from the session at every archive/database boundary.
 - Media endpoints authenticate and support HTTP Range without exposing real paths.
 
@@ -708,7 +713,10 @@ Run `./scripts/verify`. It must:
 5. load the real transcription model;
 6. run Puppeteer in the Compose `test_runner` service against the app service's
    direct `http://app:${APP_PORT}` origin, with browser-console/network capture
-   and screenshots;
+   and screenshots; launch test Chrome with an isolated test `userDataDir` and
+   `--unsafely-treat-insecure-origin-as-secure=http://app:${APP_PORT}` only in this
+   test service so service workers, media capture, installation, and Wake Lock can
+   be exercised over the app's real HTTP transport;
 7. run live OpenRouter/TTS tests when switches and credentials are present;
 8. restart services during upload/job work;
 9. exercise index/database disaster recovery;
@@ -767,7 +775,9 @@ reflect, reload, go offline, close/reopen, and update the PWA.
 - First admin, invite, second account, logout/login, isolation attempts.
 - Native fake microphone record/stop using
   `--use-fake-device-for-media-stream`, `--use-fake-ui-for-media-stream`, and
-  `--use-file-for-fake-audio-capture=<wav>`.
+  `--use-file-for-fake-audio-capture=<wav>`. The test-only Chrome command also
+  includes
+  `--unsafely-treat-insecure-origin-as-secure=http://app:${APP_PORT}`.
 - Full local → upload → transcribe → complete journey and playback/search.
 - Offline shell, record/text while offline, close/reopen same profile, reconnect,
   idempotent sync, delayed local cleanup.
