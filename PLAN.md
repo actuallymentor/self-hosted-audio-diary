@@ -714,6 +714,10 @@ reflect, reload, go offline, close/reopen, and update the PWA.
 - Give the owner an exact Compose example and test script for iPhone Safari and
   Android Chrome: install/relaunch, native codec, offline recording, screen lock,
   interruption, quota warning, network handoff, reconnect, and background sync.
+- The iPhone test URL must use trusted HTTPS through the production reverse proxy,
+  Tailscale Serve, or an equivalent TLS route; a LAN-IP HTTP URL cannot exercise
+  microphone, service-worker, install, or wake-lock APIs. Android may use the same
+  HTTPS origin or `adb reverse` to its localhost secure context.
 - Record devices/browser versions and owner outcomes as release evidence. Fix
   device findings before stable `1.0.0`; browser emulation never becomes evidence
   that physical lifecycle behavior works.

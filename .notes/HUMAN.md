@@ -23,4 +23,5 @@
 - Put a fine-grained `GH_TOKEN` with repository Secrets and Variables write
   permission in `.env` if the agent should install GitHub Actions configuration.
 - Set the production `APP_ORIGIN` when the deployed HTTPS hostname is known; the
-  localhost default is sufficient for development.
+  localhost default is sufficient for development. Physical iPhone testing needs
+  that trusted HTTPS route; LAN-IP HTTP is not a valid PWA/microphone test origin.
