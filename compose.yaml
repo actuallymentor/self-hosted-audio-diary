@@ -1,0 +1,70 @@
+name: shad
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_VERSION: ${APP_VERSION:-0.1.0}
+    image: ${DOCKERHUB_APP_IMAGE:-shad-app}:${APP_VERSION:-0.1.0}
+    restart: unless-stopped
+    init: true
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    environment:
+      APP_DATA_PATH: /data/app
+      APP_GID: ${APP_GID:-10001}
+      APP_PORT: 3000
+      APP_UID: ${APP_UID:-10001}
+      DIARY_DATA_PATH: /data/diary
+      NODE_ENV: production
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_REFLECTION_MODEL: ${OPENROUTER_MODEL:-anthropic/claude-sonnet-4.6}
+      OPENROUTER_TTS_FORMAT: ${TTS_RESPONSE_FORMAT:-pcm}
+      OPENROUTER_TTS_MODEL: ${TTS_MODEL:-google/gemini-3.1-flash-tts-preview}
+      OPENROUTER_TTS_VOICE: ${TTS_VOICE:-Sulafat}
+      OPENROUTER_ZDR: ${OPENROUTER_ZDR_ONLY:-true}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      SESSION_TTL_DAYS: ${SESSION_TTL_DAYS:-30}
+      TRANSCRIPTION_MODEL: ${TRANSCRIPTION_MODEL:-large-v3}
+      TRANSCRIPTION_URL: http://transcriber:8000
+      UPLOAD_TTL_DAYS: ${UPLOAD_TTL_DAYS:-30}
+    volumes:
+      - ${APP_DATA_PATH:-./data/app}:/data/app
+      - ${DIARY_DATA_PATH:-./data/diary}:/data/diary
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health/ready').then(r=>{if(!r.ok)process.exit(1)})"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    depends_on:
+      transcriber:
+        condition: service_started
+
+  transcriber:
+    build:
+      context: transcriber
+      dockerfile: Dockerfile
+      args:
+        APP_VERSION: ${APP_VERSION:-0.1.0}
+    image: ${DOCKERHUB_TRANSCRIBER_IMAGE:-shad-transcriber}:${APP_VERSION:-0.1.0}
+    restart: unless-stopped
+    init: true
+    environment:
+      APP_GID: ${APP_GID:-10001}
+      APP_UID: ${APP_UID:-10001}
+      HF_TOKEN: ${HF_TOKEN:-}
+      MODEL_CACHE_PATH: /var/lib/transcriber/huggingface
+      TRANSCRIPTION_COMPUTE_TYPE: ${TRANSCRIPTION_COMPUTE_TYPE:-int8}
+      TRANSCRIPTION_CPU_THREADS: ${TRANSCRIPTION_CPU_THREADS:-auto}
+      TRANSCRIPTION_MODEL: Systran/faster-whisper-large-v3
+      TRANSCRIPTION_MODEL_REVISION: ${TRANSCRIPTION_MODEL_REVISION:-edaa852ec7e145841d8ffdb056a99866b5f0a478}
+    volumes:
+      - ${TRANSCRIPTION_MODEL_CACHE_PATH:-./data/models}:/var/lib/transcriber/huggingface
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s

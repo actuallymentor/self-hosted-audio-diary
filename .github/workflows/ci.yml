@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Use pinned Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+      - run: npm run lint:check
+      - run: npm test
+      - run: npm run build
+      - run: docker compose -f compose.yaml -f compose.test.yaml config --quiet
+
+  native-images:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            platform: amd64
+          - runner: ubuntu-24.04-arm
+            platform: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Use pinned Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: .nvmrc
+
+      - name: Build native application image
+        run: docker build --build-arg APP_VERSION="$(node -p "require('./package.json').version")" --tag shad-app:native .
+
+      - name: Build native transcriber image
+        run: docker build --build-arg APP_VERSION="$(node -p "require('./package.json').version")" --tag shad-transcriber:native transcriber
+
+      - name: Smoke native artifacts
+        run: |
+          test "$(docker image inspect shad-app:native --format '{{.Architecture}}')" = "${{ matrix.platform }}"
+          test "$(docker image inspect shad-transcriber:native --format '{{.Architecture}}')" = "${{ matrix.platform }}"
+          test "$(docker image inspect shad-app:native --format '{{index .Config.Labels "org.opencontainers.image.version"}}')" = "$(node -p "require('./package.json').version")"
+          test "$(docker image inspect shad-transcriber:native --format '{{index .Config.Labels "org.opencontainers.image.version"}}')" = "$(node -p "require('./package.json').version")"
+          docker run --rm --entrypoint node shad-app:native -e "import('better-sqlite3').then(() => console.log(process.arch))"
+          docker run --rm --entrypoint python shad-transcriber:native -c "import av, ctranslate2, faster_whisper; print(ctranslate2.get_supported_compute_types('cpu'))"
+
+  full-verification:
+    needs: quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      OPENROUTER_MODEL: anthropic/claude-sonnet-4.6
+      OPENROUTER_ZDR_ONLY: "true"
+      RUN_OPENROUTER_TESTS: ${{ github.event_name != 'pull_request' && 'true' || 'false' }}
+      RUN_TTS_TESTS: ${{ github.event_name != 'pull_request' && 'true' || 'false' }}
+      TRANSCRIPTION_MODEL_CACHE_PATH: ${{ github.workspace }}/.test-runtime/models
+      TTS_MODEL: google/gemini-3.1-flash-tts-preview
+      TTS_PROVIDER: openrouter
+      TTS_RESPONSE_FORMAT: pcm
+      TTS_VOICE: Sulafat
+    steps:
+      - name: Check out source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Use pinned Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Restore pinned speech-model cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .test-runtime/models
+          key: large-v3-edaa852ec7e145841d8ffdb056a99866-${{ runner.os }}-${{ runner.arch }}
+
+      - run: npm ci
+      - run: ./scripts/verify
+
+      - name: Upload failure evidence
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: verification-artifacts
+          path: .test-runtime/verify-*/artifacts
+          if-no-files-found: ignore

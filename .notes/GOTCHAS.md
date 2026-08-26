@@ -1,0 +1,11 @@
+# Project gotchas
+
+- Babysit mounts `/workspace/node_modules` from a separate volume. Sibling Docker
+  containers must build lockfile-coupled dependencies instead of bind-mounting the
+  host workspace's `node_modules` path.
+- Chrome treats the Docker hostname `app` as part of the HSTS-preloaded `.app`
+  namespace. Browser tests use the reserved `diary.test` network alias.
+- End-to-end microphone audio must contain recognizable speech. A tone validates
+  `MediaRecorder`, but large-v3 correctly returns an empty transcript.
+- Failed verification artifacts may be uploaded by CI. Rendered Compose files and
+  retained text logs must stay credential-free and be redacted defensively.

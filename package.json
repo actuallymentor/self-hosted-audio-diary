@@ -1,0 +1,70 @@
+{
+  "name": "self-hosted-audio-diary",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "dev": "vite",
+    "dev:server": "NODE_ENV=development node --watch src/server/server.js",
+    "start": "node src/server/server.js",
+    "build": "vite build",
+    "lint": "eslint --fix src scripts tests vite.config.js",
+    "lint:check": "eslint src scripts tests vite.config.js",
+    "test": "node --test --test-concurrency=1 tests/unit/*.test.js tests/integration/*.test.js",
+    "test:unit": "node --test tests/unit/*.test.js",
+    "test:integration": "node --test --test-concurrency=1 tests/integration/*.test.js",
+    "test:e2e": "node --test --test-concurrency=1 tests/e2e/*.test.js",
+    "test:live": "node --env-file-if-exists=.env --test --test-concurrency=1 tests/live/*.test.js",
+    "reconcile": "node scripts/reconcile.js",
+    "rebuild-index": "node scripts/rebuild_index.js",
+    "recover-accounts": "node scripts/recover_accounts.js",
+    "verify": "scripts/verify",
+    "prepare": "husky"
+  },
+  "dependencies": {
+    "@fastify/cookie": "11.0.2",
+    "@fastify/multipart": "9.3.0",
+    "@fastify/static": "10.1.3",
+    "@fontsource-variable/montserrat": "5.3.0",
+    "@fontsource-variable/nunito": "5.3.0",
+    "@noble/hashes": "2.0.1",
+    "argon2": "0.45.1",
+    "better-sqlite3": "13.0.3",
+    "dexie": "4.2.1",
+    "dexie-react-hooks": "4.4.0",
+    "fastify": "5.12.1",
+    "file-type": "21.3.4",
+    "less-lazy": "0.0.2",
+    "mentie": "0.5.4",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-hot-toast": "2.6.0",
+    "react-markdown": "10.1.0",
+    "react-router": "7.18.2",
+    "react-router-dom": "7.18.2",
+    "styled-components": "6.5.3",
+    "use-query-params": "2.2.1",
+    "yaml": "2.9.0",
+    "zod": "4.1.12",
+    "zustand": "5.0.8"
+  },
+  "devDependencies": {
+    "@axe-core/puppeteer": "4.11.0",
+    "@vitejs/plugin-react": "6.1.0",
+    "airier": "0.1.1",
+    "axe-core": "4.11.0",
+    "eslint": "9.39.2",
+    "husky": "9.1.7",
+    "puppeteer": "25.9.0",
+    "vite": "8.2.2",
+    "vite-plugin-pwa": "1.3.0"
+  },
+  "allowScripts": {
+    "argon2@0.45.1": true,
+    "better-sqlite3@13.0.3": true,
+    "puppeteer@25.9.0": true
+  }
+}

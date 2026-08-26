@@ -1,0 +1,52 @@
+# babysit.yaml
+
+# Babysit configuration
+config:
+    # Prompt typed into the agent screen on launch. Set to null or "" to disable.
+    initial_prompt: |-
+        You are running inside a Docker container — an isolated sandbox built for coding agents. You have passwordless sudo for any operation that needs root, this is safe for you to use at will. Your workspace is /workspace (bind-mounted from the host). Always read ~/.agents/AGENTS.md if it exists.
+
+        Google Chrome, Puppeteer, and Xvfb are preinstalled for browser automation; Poppler's `pdfinfo`, `pdftotext`, `pdftoppm`, and `pdftocairo` commands plus `qpdf` are available for PDFs. Import `puppeteer` from Node.js; its default headless mode works directly. For headful Chrome, launch with `headless: false` and run the script through `xvfb-run -a`. Never add `--no-sandbox`.
+
+        Common build, process, filesystem, and code tools are also preinstalled: `pkgconf`/`pkg-config`, `pstree`, `fuser`, `killall`, `socat`, `getfacl`, `setfacl`, `inotifywait`, `inotifywatch`, `entr`, `shfmt`, `git filter-repo`, and Universal Ctags (`ctags`, `ctags-universal`, and `readtags`).
+
+        Do NOT add Co-Authored-By lines to git commit messages. The git author identity is already configured via environment variables.
+
+        Docker-outside-of-Docker is enabled. The host Docker API socket is mounted in this container and DOCKER_HOST points at it. Docker commands you run here create sibling containers on the host Docker daemon, not nested containers inside this container. The original host workspace path is available as BABYSIT_HOST_WORKSPACE for nested Babysit runs. This capability can bypass sandbox/mudbox filesystem expectations because Docker can start containers with host bind mounts.
+
+        You are running in YOLO mode (AGENT_AUTONOMY_MODE=yolo). The environment variable AGENT_AUTONOMY_MODE is set to 'yolo'. In this mode you are expected to act with maximum autonomy — fulfill the user's intent with as little interaction as possible. Do not ask for confirmation before taking actions. Prefer doing over asking. If a task is ambiguous, make a reasonable choice and proceed. Commit your work without confirmation.
+    idle_timeout_s: 300 # The amount of seconds of inactivity (no output in the tmux session) that count as `on: idle`
+
+    # Named shell commands are opt-in. Uncomment and configure before use.
+    # commands:
+    #     notify_command: >
+    #         curl -f -X POST -d \
+    #             "token=$PUSHOVER_TOKEN&user=$PUSHOVER_USER&title=Babysit&message=I need your input&url=&priority=0" https://api.pushover.net/1/messages.json
+
+# Babysit instructions
+babysit:
+
+    # Format:
+    # - on: <event> # unquoted words are special keywords, quotes words are literal matches, regex is supported with /regex/flags. Note that the `on:` only triggers if the match is the latest seen output for longer than the timeout
+    #   do: <action> # unquoted words are special keywords or commands specified in config.commands, quoted words are literal input followed by and enter keystroke
+
+    # Examples are disabled until you uncomment and configure them.
+
+    # Send a markdown workflow when the coding agent is idle.
+    # - on: idle # this means no new output in the tmux session
+    #   do: ./IDLE.md # create this file first; relative and absolute paths work
+    #   timeout: 30:00 # overrides idle_timeout_s; SS, MM:SS, or HH:MM:SS
+
+    # This instructs babysit to accept any plan that the coding agent submits by pressing "enter" when it encounters a plan acceptance step
+    # - on: plan # this means the coding agent is asking the user to accept a plan
+    #   do: enter
+    #   timeout: 10 # waits 10 seconds
+
+    # Run the configured notification command when the agent needs input.
+    # - on: choice
+    #   do: notify_command
+    #   timeout: 1:00:00
+
+    # - on: /error/i
+    #   do: notify_command
+    #   timeout: 05:00

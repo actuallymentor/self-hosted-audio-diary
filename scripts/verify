@@ -1,0 +1,255 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+workspace_local=$(pwd -P)
+workspace_host=${BABYSIT_HOST_WORKSPACE:-$workspace_local}
+package_version=$(node -p "require('./package.json').version")
+run_name="verify-$(date -u +%Y%m%d-%H%M%S)-$$"
+runtime_local="$workspace_local/.test-runtime/$run_name"
+runtime_host="$workspace_host/.test-runtime/$run_name"
+project_name="shad-$run_name"
+compose=(docker compose -p "$project_name" -f compose.yaml -f compose.test.yaml)
+
+case "$runtime_local" in
+"$workspace_local"/.test-runtime/verify-*) ;;
+*)
+    echo "Unsafe verification directory: $runtime_local" >&2
+    exit 1
+    ;;
+esac
+
+mkdir -p "$runtime_local/app" "$runtime_local/diary" "$runtime_local/recovered-app" "$runtime_local/artifacts"
+chmod 0777 "$runtime_local/app" "$runtime_local/diary" "$runtime_local/recovered-app" "$runtime_local/artifacts"
+
+export APP_DATA_PATH="$runtime_host/app"
+export APP_PORT=0
+export APP_VERSION="$package_version"
+export DIARY_DATA_PATH="$runtime_host/diary"
+export TRANSCRIPTION_MODEL_CACHE_PATH="${TRANSCRIPTION_MODEL_CACHE_PATH:-$workspace_host/.test-runtime/models}"
+export VERIFY_ARTIFACTS_PATH="$runtime_host/artifacts"
+export VERIFY_WORKSPACE_PATH="$workspace_host"
+
+wait_for_app() {
+    for attempt in $(seq 1 120); do
+        health=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$app_id")
+        [ "$health" = healthy ] && return
+        [ "$attempt" -eq 120 ] && return 1
+        sleep 2
+    done
+}
+
+wait_for_transcriber() {
+    for attempt in $(seq 1 360); do
+        if docker exec "$transcriber_id" python -c \
+            "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz')" \
+            >/dev/null 2>&1; then
+            return
+        fi
+
+        if [ "$((attempt % 12))" -eq 0 ]; then
+            echo "[verify] model still loading ($((attempt * 5))s)"
+        fi
+
+        [ "$attempt" -eq 360 ] && return 1
+        sleep 5
+    done
+}
+
+redact_artifacts() {
+    for secret_name in OPENROUTER_API_KEY HF_TOKEN DOCKERHUB_TOKEN; do
+        secret_value=${!secret_name:-}
+        [ -n "$secret_value" ] || continue
+
+        while IFS= read -r -d '' artifact; do
+            SECRET_VALUE="$secret_value" node -e '
+                const fs = require( "node:fs" )
+                const target = process.argv[1]
+                const content = fs.readFileSync( target, "utf8" )
+                fs.writeFileSync( target, content.split( process.env.SECRET_VALUE ).join( "<redacted>" ) )
+            ' "$artifact"
+        done < <(find "$runtime_local/artifacts" -type f \
+            \( -name '*.json' -o -name '*.log' -o -name '*.txt' -o -name '*.yaml' \) -print0)
+    done
+}
+
+cleanup() {
+    status=$?
+
+    if [ "$status" -eq 0 ]; then
+        cleanup_image=$(docker inspect --format '{{.Image}}' "$app_id")
+        "${compose[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true
+        docker run --rm \
+            --volume "$runtime_host:/runtime" \
+            --entrypoint sh \
+            "$cleanup_image" \
+            -c 'find /runtime -mindepth 1 -delete'
+        rmdir -- "$runtime_local"
+        echo "Verification passed; isolated runtime removed."
+    else
+        echo "Verification failed; runtime preserved at $runtime_local" >&2
+        "${compose[@]}" logs --no-color >"$runtime_local/artifacts/compose.log" 2>&1 || true
+        redact_artifacts
+    fi
+}
+
+trap cleanup EXIT
+
+echo "[verify] preflight"
+docker version >/dev/null
+docker compose version >/dev/null
+node --version | grep -Eq '^v24\.'
+npm --version >/dev/null
+df -Pk "$workspace_local" | awk 'NR == 2 && $4 < 8388608 { exit 1 }'
+
+# The rendered configuration is retained on failure and uploaded by CI. Validate
+# the shape without ever serializing runtime credentials into that artifact.
+OPENROUTER_API_KEY= \
+    HF_TOKEN= \
+    DOCKERHUB_TOKEN= \
+    "${compose[@]}" config >"$runtime_local/artifacts/compose-rendered.yaml"
+
+if grep -Eq 'DOCKERHUB_(TOKEN|USERNAME)' "$runtime_local/artifacts/compose-rendered.yaml"; then
+    echo "Publishing credentials reached service configuration" >&2
+    exit 1
+fi
+
+echo "[verify] source gates"
+npm run lint:check
+npm run build
+
+echo "[verify] production images"
+"${compose[@]}" build app
+"${compose[@]}" run --rm --no-deps app_test_runner 2>&1 |
+    tee "$runtime_local/artifacts/app-tests.log"
+"${compose[@]}" build transcriber
+"${compose[@]}" build test_runner
+"${compose[@]}" up --detach app transcriber
+
+app_id=$("${compose[@]}" ps --quiet app)
+transcriber_id=$("${compose[@]}" ps --quiet transcriber)
+
+for container_id in "$app_id" "$transcriber_id"; do
+    environment=$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$container_id")
+
+    if grep -Eq '^DOCKERHUB_(TOKEN|USERNAME)=' <<<"$environment"; then
+        echo "Publishing credentials leaked into a runtime container" >&2
+        exit 1
+    fi
+done
+
+if docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$app_id" | grep -q '^HF_TOKEN='; then
+    echo "HF_TOKEN leaked into the application container" >&2
+    exit 1
+fi
+
+echo "[verify] plain HTTP readiness"
+wait_for_app
+
+echo "[verify] pinned large-v3 readiness"
+wait_for_transcriber
+
+echo "[verify] queue work through a transcriber outage"
+"${compose[@]}" stop transcriber >/dev/null
+
+echo "[verify] real Chrome PWA journey"
+"${compose[@]}" run --rm --no-deps test_runner 2>&1 |
+    tee "$runtime_local/artifacts/e2e.log"
+
+echo "[verify] service restart and durable job recovery"
+"${compose[@]}" start transcriber >/dev/null
+"${compose[@]}" restart app >/dev/null
+wait_for_app
+wait_for_transcriber
+
+for attempt in $(seq 1 300); do
+    job_state=$(docker exec "$app_id" node -e '
+        const Database = require( "better-sqlite3" )
+        const database = new Database( "/data/app/shad.sqlite", { readonly: true } )
+        const state = database.prepare( `
+            SELECT
+                COUNT(*) AS total,
+                SUM(status != ?) AS pending,
+                SUM(status = ?) AS failed
+            FROM jobs WHERE type = ?
+        ` ).get( `complete`, `failed`, `transcription` )
+
+        console.log( `${ state.total }:${ state.pending ?? 0 }:${ state.failed ?? 0 }` )
+        database.close()
+    ')
+    IFS=: read -r total_jobs pending_jobs failed_jobs <<<"$job_state"
+
+    [ "$failed_jobs" -gt 0 ] && exit 1
+    [ "$total_jobs" -ge 2 ] && [ "$pending_jobs" -eq 0 ] && break
+    [ "$attempt" -eq 300 ] && exit 1
+    sleep 2
+done
+
+echo "[verify] live multilingual inference and providers"
+"${compose[@]}" run --rm live_test_runner 2>&1 |
+    tee "$runtime_local/artifacts/live-tests.log"
+
+echo "[verify] database-loss reconciliation"
+"${compose[@]}" stop app >/dev/null
+"${compose[@]}" run --rm --no-deps -T \
+    --volume "$runtime_host/recovered-app:/data/app" \
+    --volume "$runtime_host/diary:/data/diary" \
+    app npm run reconcile >"$runtime_local/artifacts/reconcile.json"
+
+"${compose[@]}" run --rm --no-deps -T \
+    --volume "$runtime_host/recovered-app:/data/app" \
+    --volume "$runtime_host/diary:/data/diary" \
+    app node --input-type=module - <<'NODE'
+import { read_config } from "./src/server/config/read_config.js"
+import { create_runtime } from "./src/server/runtime/create_runtime.js"
+
+const runtime = create_runtime( read_config() )
+const users = runtime.database.prepare( `SELECT status FROM users` ).all()
+const items = runtime.database.prepare( `SELECT COUNT(*) AS count FROM items` ).get().count
+
+if( !users.length || users.some( user => user.status !== `recovery_pending` ) || !items ) process.exit( 1 )
+runtime.database.close()
+NODE
+
+"${compose[@]}" run --rm --no-deps -T \
+    --volume "$runtime_host/diary:/data/diary" \
+    app find /data/diary -type f -printf '%P %s bytes\n' |
+    sort >"$runtime_local/artifacts/archive-tree.txt"
+
+"${compose[@]}" run --rm --no-deps -T \
+    --volume "$runtime_host/diary:/data/diary" \
+    app sh -c '
+        find /data/diary/users -type f \
+            \( -name "*.m4a" -o -name "*.mp3" -o -name "*.mp4" -o -name "*.mov" \
+                -o -name "*.ogg" -o -name "*.wav" -o -name "*.webm" \) \
+            -exec ffprobe -v error \
+                -show_entries format=filename,duration,size:stream=codec_name,codec_type \
+                -of json {} \;
+    ' >"$runtime_local/artifacts/ffprobe.txt"
+
+for container_id in "$app_id" "$transcriber_id"; do
+    image_id=$(docker inspect --format '{{.Image}}' "$container_id")
+
+    docker image inspect \
+        "$image_id" \
+        --format '{{.RepoTags}} {{.Architecture}} {{json .Config.Labels}}' \
+        >>"$runtime_local/artifacts/images.txt"
+
+    image_version=$(docker image inspect \
+        --format '{{index .Config.Labels "org.opencontainers.image.version"}}' \
+        "$image_id")
+    [ "$image_version" = "$package_version" ] || {
+        echo "Image label $image_version does not match package version $package_version" >&2
+        exit 1
+    }
+done
+
+printf '%s\n' \
+    "package/version: $package_version" \
+    "unit + integration: passed" \
+    "Chrome PWA journey: passed" \
+    "service restart + queued jobs: passed ($total_jobs jobs)" \
+    "live providers enabled: ${RUN_OPENROUTER_TESTS:-false}/${RUN_TTS_TESTS:-false}" \
+    "database-loss reconciliation: passed" \
+    >"$runtime_local/artifacts/test-summary.txt"
+
+echo "[verify] all gates passed"

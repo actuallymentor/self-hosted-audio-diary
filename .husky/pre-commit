@@ -1,0 +1,17 @@
+printf '\n🤖 [ precommit hook ] linting before committing...\n'
+
+# If errors, make it clear they cannot commit
+if ! lint_outcome=$(npm run lint); then
+    printf '🚨 [ precommit hook ] lint encountered blocking issues, fix them before committing\n'
+    printf '%s\n' "$lint_outcome"
+    exit 1
+fi
+
+# If warnings, suggest they fix them
+if printf '%s\n' "$lint_outcome" | grep -q "warning"; then
+    printf '⚠️ [ precommit hook ] lint encountered warnings, consider fixing them before pushing\n'
+    printf '%s\n' "$lint_outcome"
+    exit 0
+fi
+
+printf '✅ [ precommit hook ] lint encountered no blocking issues\n'

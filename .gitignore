@@ -142,6 +142,25 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
 
+# Local application data and generated test artifacts
+data/
+artifacts/
+.test-runtime/
+test-results/
+
 # Repository deploy key — never commit local credentials
 .ssh_key
 .ssh_key.pub
+
+# Dotfiles
+.*
+
+# Intentionally versioned project dotfiles
+!.dockerignore
+!.env.example
+!.nvmrc
+!.github/
+!.github/workflows/
+!.github/workflows/*.yml
+!.notes/
+!.notes/*.md

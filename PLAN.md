@@ -712,9 +712,9 @@ Run `./scripts/verify`. It must:
 4. run unit/integration suites inside the app build environment;
 5. load the real transcription model;
 6. run Puppeteer in the Compose `test_runner` service against the app service's
-   direct `http://app:${APP_PORT}` origin, with browser-console/network capture
+  direct `http://diary.test:${APP_PORT}` service alias, with browser-console/network capture
    and screenshots; launch test Chrome with an isolated test `userDataDir` and
-   `--unsafely-treat-insecure-origin-as-secure=http://app:${APP_PORT}` only in this
+  `--unsafely-treat-insecure-origin-as-secure=http://diary.test:${APP_PORT}` only in this
    test service so service workers, media capture, installation, and Wake Lock can
    be exercised over the app's real HTTP transport;
 7. run live OpenRouter/TTS tests when switches and credentials are present;

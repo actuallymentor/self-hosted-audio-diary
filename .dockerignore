@@ -1,0 +1,13 @@
+.git
+.github
+.notes
+.env
+.env.*
+!.env.example
+.ssh_key
+.ssh_key.pub
+artifacts
+babysit.yaml
+data
+node_modules
+test-results

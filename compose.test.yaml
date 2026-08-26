@@ -1,0 +1,74 @@
+services:
+  app:
+    networks:
+      default:
+        aliases:
+          - diary.test
+
+  app_test_runner:
+    image: ${DOCKERHUB_APP_IMAGE:-shad-app}:${APP_VERSION:-0.1.0}
+    init: true
+    working_dir: /app
+    environment:
+      APP_GID: ${APP_GID:-10001}
+      APP_UID: ${APP_UID:-10001}
+    volumes:
+      - ${VERIFY_WORKSPACE_PATH:-.}/src/client:/app/src/client:ro
+      - ${VERIFY_WORKSPACE_PATH:-.}/tests:/app/tests:ro
+    command:
+      - node
+      - --test
+      - --test-concurrency=1
+      - tests/unit/api_client.test.js
+      - tests/unit/archive_paths.test.js
+      - tests/unit/backoff.test.js
+      - tests/unit/time.test.js
+      - tests/unit/worker.test.js
+      - tests/integration/auth.test.js
+      - tests/integration/diary.test.js
+      - tests/integration/reflection.test.js
+      - tests/integration/uploads.test.js
+
+  test_runner:
+    build:
+      context: .
+      dockerfile: tests/e2e/Dockerfile
+    image: ${E2E_TEST_IMAGE:-shad-e2e-tests}:${APP_VERSION:-0.1.0}
+    init: true
+    cap_add:
+      - SYS_ADMIN
+    shm_size: 1gb
+    working_dir: /workspace
+    environment:
+      APP_BASE_URL: http://diary.test:3000
+      CHROME_HEADLESS: "true"
+    volumes:
+      - ${VERIFY_WORKSPACE_PATH:-.}/tests:/workspace/tests:ro
+      - ${VERIFY_ARTIFACTS_PATH:-./artifacts}:/workspace/artifacts
+    depends_on:
+      app:
+        condition: service_healthy
+    command: ["node", "--test", "--test-concurrency=1", "tests/e2e/app.e2e.test.js"]
+
+  live_test_runner:
+    image: ${DOCKERHUB_APP_IMAGE:-shad-app}:${APP_VERSION:-0.1.0}
+    init: true
+    working_dir: /app
+    environment:
+      APP_GID: ${APP_GID:-10001}
+      APP_UID: ${APP_UID:-10001}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-anthropic/claude-sonnet-4.6}
+      OPENROUTER_ZDR_ONLY: ${OPENROUTER_ZDR_ONLY:-true}
+      RUN_OPENROUTER_TESTS: ${RUN_OPENROUTER_TESTS:-false}
+      RUN_TTS_TESTS: ${RUN_TTS_TESTS:-false}
+      TRANSCRIBER_BASE_URL: http://transcriber:8000
+      TTS_MODEL: ${TTS_MODEL:-google/gemini-3.1-flash-tts-preview}
+      TTS_RESPONSE_FORMAT: ${TTS_RESPONSE_FORMAT:-pcm}
+      TTS_VOICE: ${TTS_VOICE:-Sulafat}
+    volumes:
+      - ${VERIFY_WORKSPACE_PATH:-.}/tests:/app/tests:ro
+    depends_on:
+      transcriber:
+        condition: service_healthy
+    command: ["node", "--test", "--test-concurrency=1", "tests/live/full_stack.live.test.js"]
