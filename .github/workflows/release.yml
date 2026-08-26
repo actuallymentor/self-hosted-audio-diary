@@ -168,6 +168,8 @@ jobs:
 
       - name: Boot published services
         run: |
+          set -Eeuo pipefail
+
           docker volume create shad-published-app >/dev/null
           docker volume create shad-published-diary >/dev/null
           docker volume create shad-published-models >/dev/null

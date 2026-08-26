@@ -26,4 +26,4 @@
   GitHub Actions release workflow, then validate registry-pulled images. Operator
   documentation now leads with a copyable published-image Compose deployment.
 - 2026-08-26 — Independent review added post-publish registry validation and caught
-  a clean-runner image-name mismatch before the first release.
+  clean-runner image naming and fail-open health probes before the first release.
