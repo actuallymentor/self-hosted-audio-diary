@@ -35,4 +35,6 @@
 
 ## Still needed
 
-- No human input is required before implementation.
+- Rotate the OpenRouter API key. An independent review command accidentally
+  rendered the ignored local `.env` into the agent execution log. The key was
+  never committed or included in a release artifact.

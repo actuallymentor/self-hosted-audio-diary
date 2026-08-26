@@ -27,3 +27,8 @@
   documentation now leads with a copyable published-image Compose deployment.
 - 2026-08-26 — Independent review added post-publish registry validation and caught
   clean-runner image naming and fail-open health probes before the first release.
+- 2026-08-26 — GitHub Actions release `v0.1.0` passed two clean full-stack
+  verifiers, published both `amd64`/`arm64` images, and validated the Docker Hub
+  manifests and registry-pulled services. An additional anonymous pull of the
+  exact README Compose passed pinned-model readiness, a real Chrome PWA journey,
+  and service restart checks.
