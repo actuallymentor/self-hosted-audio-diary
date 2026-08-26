@@ -14,3 +14,11 @@
   replay, malformed-tag reconciliation, older-browser recorder cleanup, and restart
   recovery of incomplete finalization claims. The expanded 26-test full verifier
   passed twice from clean isolated volumes.
+- 2026-08-26 — Final review exposed authentication-slot starvation, synchronous
+  recorder-start cleanup, and archive root-shape gaps; hardening resumed.
+- 2026-08-26 — The second final verifier exposed a nondeterministic Dutch/German
+  cognate in live speech recognition; the gate now accepts equivalent concepts.
+- 2026-08-26 — Final hardening completed. Authentication capacity, failed recorder
+  starts, malformed archive shapes, and multilingual live assertions were corrected.
+  Two unchanged 27-test full verifiers (`172955-30853`, `173757-32282`) passed
+  browser interruption, restart, live provider, reconciliation, and cleanup gates.

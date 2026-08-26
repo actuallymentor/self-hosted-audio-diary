@@ -98,6 +98,26 @@ test( `persists, searches, edits, tags, trashes, and restores canonical text`, a
     malformed_metadata.tags = { unexpected: true }
     await fs.writeFile( malformed_metadata_path, `${ JSON.stringify( malformed_metadata, null, 2 ) }\n` )
 
+    const days_root = path.dirname( path.dirname( malformed_metadata_path ) )
+    const invalid_items_root = path.join( days_root, `2026-08-27` )
+    const null_metadata_root = path.join( days_root, `2026-08-28` )
+    const invalid_item_root = path.join( days_root, `2026-08-29` )
+
+    await fs.mkdir( invalid_items_root )
+    await fs.writeFile( path.join( invalid_items_root, `metadata.json` ), JSON.stringify( {
+        items: { unexpected: true },
+        schema_version: 1,
+        tags: [],
+    } ) )
+    await fs.mkdir( null_metadata_root )
+    await fs.writeFile( path.join( null_metadata_root, `metadata.json` ), `null` )
+    await fs.mkdir( invalid_item_root )
+    await fs.writeFile( path.join( invalid_item_root, `metadata.json` ), JSON.stringify( {
+        items: [ null ],
+        schema_version: 1,
+        tags: [],
+    } ) )
+
     const recovered_app = path.join( server.root, `recovered-app` )
     const recovered_runtime = create_runtime( {
         ...server.config,
@@ -116,6 +136,9 @@ test( `persists, searches, edits, tags, trashes, and restores canonical text`, a
     assert.equal( recovered_tags[0].item_id, item_id )
     assert.equal( recovered_later_item.id, later_item_id )
     assert.ok( report.conflicts.some( conflict => conflict.reason === `invalid_tags` ) )
+    assert.ok( report.conflicts.some( conflict => conflict.reason === `invalid_items` ) )
+    assert.ok( report.conflicts.some( conflict => conflict.reason === `invalid_item` ) )
+    assert.equal( report.conflicts.filter( conflict => conflict.reason === `invalid_metadata` ).length, 1 )
 } )
 
 test( `invalid capture semantics return a client error`, async t => {

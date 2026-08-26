@@ -16,7 +16,8 @@
 - Serialize chunk receipt and final media assembly across concurrent tabs.
 - Roll back failed account provisioning without consuming bootstrap or invites.
 - Preserve tag search and silent transcripts through reprojection and recovery.
-- Bound login pressure without hard-locking accounts or the instance.
+- Bound login pressure without account lockout or authentication-slot starvation.
+- Clean failed capture starts and skip malformed archive metadata safely.
 - Retry cross-tab CSRF races and clear interrupted finalization claims on restart.
 - Keep terminal upload failures local and sanitize public error details.
 - Restore offline sessions and refresh CSRF before outbox replay.

@@ -61,6 +61,11 @@ export async function reconcile_archive( runtime ) {
                 continue
             }
 
+            if( !metadata || typeof metadata !== `object` || Array.isArray( metadata ) ) {
+                report.conflicts.push( { local_date, reason: `invalid_metadata` } )
+                continue
+            }
+
             if( metadata.schema_version > archive_schema_version ) {
                 report.conflicts.push( { local_date, reason: `newer_schema` } )
                 continue
@@ -82,7 +87,12 @@ export async function reconcile_archive( runtime ) {
                 valid_tags ? metadata.tags : [],
             )
 
-            for( const item of metadata.items ?? [] ) {
+            if( !Array.isArray( metadata.items ) ) {
+                report.conflicts.push( { local_date, reason: `invalid_items` } )
+                continue
+            }
+
+            for( const item of metadata.items ) {
                 try {
                     const target = confined_path( days_root, local_date, item.path )
 
@@ -104,7 +114,7 @@ export async function reconcile_archive( runtime ) {
                     report.items += 1
                 } catch ( error ) {
                     report.conflicts.push( {
-                        item_id: item.id,
+                        item_id: item?.id,
                         local_date,
                         reason: error.code ?? `invalid_item`,
                     } )

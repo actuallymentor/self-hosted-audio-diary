@@ -6,7 +6,7 @@ const database_states = new WeakMap()
 
 function state_for( database ) {
     if( !database_states.has( database ) ) {
-        database_states.set( database, { active: 0, locks: new Map(), waiters: [] } )
+        database_states.set( database, { active: 0, waiters: [] } )
     }
 
     return database_states.get( database )
@@ -44,7 +44,7 @@ export function check_rate_limit( database, scope, submitted_value ) {
     const now = Date.now()
     const buckets = [ bucket_key( scope, `global` ), bucket_key( scope, submitted_value ) ]
     const delay_after = [ 100, 5 ]
-    const delay_steps = [ 25, 250 ]
+    const delay_steps = [ 25, 100 ]
     let delay_ms = 0
 
     for( const [ index, bucket ] of buckets.entries() ) {
@@ -53,7 +53,7 @@ export function check_rate_limit( database, scope, submitted_value ) {
         const window_started_at = !row || now - row.window_started_at > window_ms
             ? now
             : row.window_started_at
-        const bounded_delay = Math.min( 30_000, Math.max( 0, attempts - delay_after[index] ) * delay_steps[index] )
+        const bounded_delay = Math.min( 1_000, Math.max( 0, attempts - delay_after[index] ) * delay_steps[index] )
 
         delay_ms = Math.max( delay_ms, bounded_delay )
 
@@ -71,7 +71,7 @@ export function check_rate_limit( database, scope, submitted_value ) {
 }
 
 /**
- * Serialize one submitted identifier and bound global in-flight authentication.
+ * Delay abusive callers before admitting bounded authentication work.
  *
  * @template Result
  * @param {import('better-sqlite3').Database} database
@@ -81,30 +81,19 @@ export function check_rate_limit( database, scope, submitted_value ) {
  * @returns {Promise<Result>}
  */
 export async function with_rate_limit( database, scope, submitted_value, authenticate ) {
-    const state = state_for( database )
-    const key = bucket_key( scope, submitted_value )
-    const previous = state.locks.get( key ) ?? Promise.resolve()
-    let release
-    const current = new Promise( resolve => {
-        release = resolve
-    } )
-    const queued = previous.then( () => current )
+    const delay_ms = check_rate_limit( database, scope, submitted_value )
 
-    state.locks.set( key, queued )
-    await previous
+    // Sleeping outside the semaphore prevents abusive callers from reserving scarce work slots.
+    if( delay_ms ) await new Promise( resolve => setTimeout( resolve, delay_ms ) )
+
+    const state = state_for( database )
+
     await acquire_capacity( state )
 
     try {
-        const delay_ms = check_rate_limit( database, scope, submitted_value )
-
-        if( delay_ms ) await new Promise( resolve => setTimeout( resolve, delay_ms ) )
-
         return await authenticate()
     } finally {
         release_capacity( state )
-        release()
-
-        if( state.locks.get( key ) === queued ) state.locks.delete( key )
     }
 }
 

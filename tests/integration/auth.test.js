@@ -4,7 +4,7 @@ import path from "node:path"
 import test from "node:test"
 
 import { write_profile } from "../../src/server/archive/profile_store.js"
-import { with_rate_limit } from "../../src/server/auth/rate_limit.js"
+import { check_rate_limit, with_rate_limit } from "../../src/server/auth/rate_limit.js"
 import { start_test_server, test_client } from "../support/test_server.js"
 
 test( `only one concurrent first user becomes administrator`, async t => {
@@ -225,7 +225,7 @@ test( `Fastify parser errors preserve their client status`, async t => {
     assert.equal( response.status, 400 )
 } )
 
-test( `authentication capacity serializes identifiers and bounds global work`, async t => {
+test( `authentication capacity bounds work without serial identifier locks`, async t => {
     const server = await start_test_server()
     t.after( () => server.close() )
     let active = 0
@@ -237,14 +237,38 @@ test( `authentication capacity serializes identifiers and bounds global work`, a
         active -= 1
     }
 
-    await Promise.all( Array.from( { length: 5 }, () =>
+    await Promise.all( Array.from( { length: 8 }, () =>
         with_rate_limit( server.runtime.database, `same`, `owner@example.com`, work )
     ) )
-    assert.equal( maximum_active, 1 )
+    assert.equal( maximum_active, 4 )
 
     maximum_active = 0
     await Promise.all( Array.from( { length: 8 }, ( _, index ) =>
         with_rate_limit( server.runtime.database, `global`, `person-${ index }`, work )
     ) )
     assert.equal( maximum_active, 4 )
+} )
+
+test( `rate-limit delays do not reserve authentication capacity`, async t => {
+    const server = await start_test_server()
+    t.after( () => server.close() )
+    const delayed_identifiers = Array.from( { length: 4 }, ( _, index ) => `delayed-${ index }` )
+
+    for( const identifier of delayed_identifiers ) {
+        for( let attempt = 0; attempt < 15; attempt += 1 ) {
+            check_rate_limit( server.runtime.database, `delayed`, identifier )
+        }
+    }
+
+    const delayed = delayed_identifiers.map( identifier =>
+        with_rate_limit( server.runtime.database, `delayed`, identifier, async () => {} )
+    )
+    const fresh = with_rate_limit( server.runtime.database, `delayed`, `fresh`, async () => `fresh` )
+    const winner = await Promise.race( [
+        fresh,
+        new Promise( resolve => setTimeout( () => resolve( `timeout` ), 200 ) ),
+    ] )
+
+    assert.equal( winner, `fresh` )
+    await Promise.all( delayed )
 } )

@@ -139,55 +139,56 @@ export class DurableRecorder {
                 mime: this.mime,
                 status: `recording`,
             } )
+            this.recorder.addEventListener( `dataavailable`, event => {
+                if( !event.data.size ) return
+
+                const sequence = this.sequence++
+
+                // Recorder callbacks may overlap. One promise chain preserves exact byte order.
+                this.persistence = this.persistence.then( async () => {
+                    const bytes = new Uint8Array( await event.data.arrayBuffer() )
+                    const chunk_hash = bytesToHex( sha256( bytes ) )
+
+                    this.hasher.update( bytes )
+                    this.byte_size += bytes.byteLength
+
+                    await diary_database.transaction(
+                        `rw`,
+                        diary_database.chunks,
+                        diary_database.recordings,
+                        async () => {
+                            await diary_database.chunks.put( {
+                                account_id: this.account_id,
+                                blob: event.data,
+                                byte_size: bytes.byteLength,
+                                recording_id: this.id,
+                                sequence,
+                                sha256: chunk_hash,
+                            } )
+                            await diary_database.recordings.update( this.id, { byte_size: this.byte_size } )
+                        },
+                    )
+                } )
+            } )
+            this.stream.getTracks().forEach( track => {
+                track.addEventListener( `ended`, () => {
+                    void this.stop().catch( error => this.on_state( {
+                        error: error.message,
+                        id: this.id,
+                        status: `unrecoverable`,
+                    } ) )
+                }, { once: true } )
+            } )
+
+            this.recorder.start( 5_000 )
         } catch ( error ) {
+            await diary_database.recordings.delete( this.id ).catch( () => {} )
             active_recordings.delete( this.id )
             this.release_recording_lock?.()
             stream.getTracks().forEach( track => track.stop() )
             throw error
         }
 
-        this.recorder.addEventListener( `dataavailable`, event => {
-            if( !event.data.size ) return
-
-            const sequence = this.sequence++
-
-            // Recorder callbacks may overlap. One promise chain preserves exact byte order.
-            this.persistence = this.persistence.then( async () => {
-                const bytes = new Uint8Array( await event.data.arrayBuffer() )
-                const chunk_hash = bytesToHex( sha256( bytes ) )
-
-                this.hasher.update( bytes )
-                this.byte_size += bytes.byteLength
-
-                await diary_database.transaction(
-                    `rw`,
-                    diary_database.chunks,
-                    diary_database.recordings,
-                    async () => {
-                        await diary_database.chunks.put( {
-                            account_id: this.account_id,
-                            blob: event.data,
-                            byte_size: bytes.byteLength,
-                            recording_id: this.id,
-                            sequence,
-                            sha256: chunk_hash,
-                        } )
-                        await diary_database.recordings.update( this.id, { byte_size: this.byte_size } )
-                    },
-                )
-            } )
-        } )
-        this.stream.getTracks().forEach( track => {
-            track.addEventListener( `ended`, () => {
-                void this.stop().catch( error => this.on_state( {
-                    error: error.message,
-                    id: this.id,
-                    status: `unrecoverable`,
-                } ) )
-            }, { once: true } )
-        } )
-
-        this.recorder.start( 5_000 )
         await this.acquire_wake_lock()
         document.addEventListener( `visibilitychange`, this.resume_wake_lock )
         sensory_feedback( 620 )
