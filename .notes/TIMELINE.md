@@ -6,3 +6,7 @@
   outage recovery, live multilingual transcription, reflection, TTS, archive
   reconciliation, image metadata, and secret-boundary gates passed twice from
   clean isolated volumes after final reflection, style, and changelog review.
+- 2026-08-26 — Post-commit independent review found and drove fixes for interrupted
+  capture recovery, upload finalization concurrency, provisioning rollback, bounded
+  auth delays, tag reprojection, silent transcripts, and safe API error boundaries.
+  The corrected 25-test gate and full clean-volume verifier then passed twice.

@@ -3,6 +3,19 @@ import { bytesToHex } from "@noble/hashes/utils.js"
 
 import { diary_database } from "../storage/database.js"
 
+export const recording_lock_prefix = `shad:recording:`
+const active_recordings = new Set()
+
+/**
+ * Check this tab's live capture registry when Web Locks are unavailable.
+ *
+ * @param {string} recording_id
+ * @returns {boolean}
+ */
+export function recording_is_active( recording_id ) {
+    return active_recordings.has( recording_id )
+}
+
 function sensory_feedback( frequency ) {
     if( localStorage.getItem( `shad:haptics` ) === `true` ) navigator.vibrate?.( 20 )
     if( localStorage.getItem( `shad:sounds` ) !== `true` ) return
@@ -80,6 +93,8 @@ export class DurableRecorder {
         this.hasher = sha256.create()
         this.byte_size = 0
         this.wake_lock = null
+        this.release_recording_lock = null
+        this.stop_promise = null
         this.resume_wake_lock = () => {
             if( document.visibilityState === `visible` && this.recorder?.state === `recording` ) {
                 void this.acquire_wake_lock()
@@ -99,16 +114,26 @@ export class DurableRecorder {
         const [ recorder_mime ] = this.recorder.mimeType.split( `;` )
         this.mime = recorder_mime
 
-        await diary_database.recordings.put( {
-            account_id: this.account_id,
-            attempts: 0,
-            byte_size: 0,
-            capture: this.capture,
-            created_at: Date.now(),
-            id: this.id,
-            mime: this.mime,
-            status: `recording`,
-        } )
+        await this.hold_recording_lock()
+        active_recordings.add( this.id )
+
+        try {
+            await diary_database.recordings.put( {
+                account_id: this.account_id,
+                attempts: 0,
+                byte_size: 0,
+                capture: this.capture,
+                created_at: Date.now(),
+                id: this.id,
+                mime: this.mime,
+                status: `recording`,
+            } )
+        } catch ( error ) {
+            active_recordings.delete( this.id )
+            this.release_recording_lock?.()
+            stream.getTracks().forEach( track => track.stop() )
+            throw error
+        }
 
         this.recorder.addEventListener( `dataavailable`, event => {
             if( !event.data.size ) return
@@ -141,6 +166,15 @@ export class DurableRecorder {
                 )
             } )
         } )
+        this.stream.getTracks().forEach( track => {
+            track.addEventListener( `ended`, () => {
+                void this.stop().catch( error => this.on_state( {
+                    error: error.message,
+                    id: this.id,
+                    status: `unrecoverable`,
+                } ) )
+            }, { once: true } )
+        } )
 
         this.recorder.start( 5_000 )
         await this.acquire_wake_lock()
@@ -150,31 +184,54 @@ export class DurableRecorder {
     }
 
     /** Stop only after the final recorder event and all IndexedDB writes complete. */
-    async stop() {
-        if( !this.recorder || this.recorder.state === `inactive` ) return
+    stop() {
+        this.stop_promise ??= this.finish_stop()
 
-        const stopped = new Promise( resolve => this.recorder.addEventListener( `stop`, resolve, { once: true } ) )
+        return this.stop_promise
+    }
 
-        this.recorder.requestData()
-        this.recorder.stop()
-        await stopped
-        await this.persistence
+    async finish_stop() {
+        if( !this.recorder ) return undefined
 
-        this.stream.getTracks().forEach( track => track.stop() )
-        await this.wake_lock?.release?.()
-        document.removeEventListener( `visibilitychange`, this.resume_wake_lock )
-        sensory_feedback( 420 )
+        try {
+            if( this.recorder.state !== `inactive` ) {
+                const stopped = new Promise( resolve => this.recorder.addEventListener( `stop`, resolve, { once: true } ) )
 
-        const whole_sha256 = bytesToHex( this.hasher.digest() )
+                this.recorder.requestData()
+                this.recorder.stop()
+                await stopped
+            }
 
-        await diary_database.recordings.update( this.id, {
-            byte_size: this.byte_size,
-            status: `saved_local`,
-            whole_sha256,
-        } )
-        this.on_state( { id: this.id, status: `saved_local` } )
+            await this.persistence
+            sensory_feedback( 420 )
 
-        return this.id
+            if( !this.byte_size ) {
+                await diary_database.recordings.update( this.id, {
+                    last_error: `No audio bytes were saved before capture ended.`,
+                    status: `unrecoverable`,
+                } )
+                this.on_state( { id: this.id, status: `unrecoverable` } )
+
+                return this.id
+            }
+
+            const whole_sha256 = bytesToHex( this.hasher.digest() )
+
+            await diary_database.recordings.update( this.id, {
+                byte_size: this.byte_size,
+                status: `saved_local`,
+                whole_sha256,
+            } )
+            this.on_state( { id: this.id, status: `saved_local` } )
+
+            return this.id
+        } finally {
+            this.stream.getTracks().forEach( track => track.stop() )
+            await this.wake_lock?.release?.()
+            document.removeEventListener( `visibilitychange`, this.resume_wake_lock )
+            active_recordings.delete( this.id )
+            this.release_recording_lock?.()
+        }
     }
 
     /** Acquire optional screen wake lock without making capture depend on it. */
@@ -184,6 +241,25 @@ export class DurableRecorder {
         } catch {
             this.wake_lock = null
         }
+    }
+
+    /** Hold a cross-tab lock so another PWA window cannot recover live capture. */
+    async hold_recording_lock() {
+        if( !navigator.locks?.request ) return
+
+        const ready = Promise.withResolvers()
+        const holding = Promise.withResolvers()
+
+        this.release_recording_lock = holding.resolve
+        this.recording_lock_task = navigator.locks.request(
+            `${ recording_lock_prefix }${ this.id }`,
+            async () => {
+                ready.resolve()
+                await holding.promise
+            },
+        ).catch( error => ready.reject( error ) )
+
+        await ready.promise
     }
 }
 

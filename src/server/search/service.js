@@ -16,6 +16,15 @@ function fts_query( value ) {
  * @param {object} document
  */
 export function index_document( runtime, document ) {
+    const tags = document.tags ?? runtime.database.prepare( `
+        SELECT tags.value
+        FROM day_tags
+        JOIN days ON days.id = day_tags.day_id
+        JOIN tags ON tags.id = day_tags.tag_id
+        WHERE days.user_id = ? AND days.local_date = ?
+        ORDER BY tags.value
+    ` ).all( document.user_id, document.local_date ).map( row => row.value )
+
     runtime.database.prepare( `
     INSERT INTO search_documents (user_id, item_id, local_date, type, content, tags)
     VALUES (?, ?, ?, ?, ?, ?)
@@ -30,7 +39,7 @@ export function index_document( runtime, document ) {
         document.local_date,
         document.type,
         document.content,
-        document.tags.join( ` ` ),
+        tags.join( ` ` ),
     )
 }
 

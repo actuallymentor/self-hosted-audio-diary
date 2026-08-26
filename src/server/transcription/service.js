@@ -68,8 +68,6 @@ export async function transcribe_item( runtime, job ) {
         const result = await response.json()
         const text = String( result.text ?? `` ).trim()
 
-        if( !text ) throw new Error( `Transcriber returned no text` )
-
         const base = path.basename( item.relative_path, path.extname( item.relative_path ) )
         const machine_relative = path.join( `transcripts`, `${ base }.machine.txt` )
         const display_relative = path.join( `transcripts`, `${ base }.txt` )
@@ -110,7 +108,6 @@ export async function transcribe_item( runtime, job ) {
             content: display_text,
             item_id: item.id,
             local_date: item.local_date,
-            tags: [],
             type: `audio`,
             user_id: item.user_id,
         } )

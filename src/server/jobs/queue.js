@@ -1,5 +1,16 @@
 import { randomUUID } from "node:crypto"
 
+function safe_error_code( job, error ) {
+    const transcriber_status = String( error.message ?? `` ).match( /^Transcriber returned (\d{3})$/ )
+
+    if( transcriber_status ) return `transcriber_http_${ transcriber_status[1] }`
+    if( typeof error.code === `string` && /^[a-z0-9_]{1,80}$/i.test( error.code ) ) {
+        return error.code.toLowerCase()
+    }
+
+    return `${ job.type }_failed`
+}
+
 /**
  * Enqueue one idempotent at-least-once job.
  *
@@ -104,7 +115,7 @@ export function finish( runtime, job, error = null ) {
   ` ).run(
         terminal ? `failed` : `queued`,
         Date.now() + backoff,
-        String( error.message ?? error ).slice( 0, 500 ),
+        safe_error_code( job, error ),
         Date.now(),
         job.id,
     )

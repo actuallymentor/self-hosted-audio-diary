@@ -1,7 +1,7 @@
 import fs from "node:fs/promises"
 
 import { archive_schema_version } from "../../shared/constants.js"
-import { ensure_day, project_item } from "../diary/service.js"
+import { ensure_day, project_item, project_tags } from "../diary/service.js"
 import { list_profiles } from "./profile_store.js"
 import { confined_path, user_root } from "./paths.js"
 
@@ -68,6 +68,7 @@ export async function reconcile_archive( runtime ) {
 
             report.days += 1
             ensure_day( runtime, profile.user_id, local_date )
+            project_tags( runtime, profile.user_id, local_date, metadata.tags ?? [] )
 
             for( const item of metadata.items ?? [] ) {
                 try {

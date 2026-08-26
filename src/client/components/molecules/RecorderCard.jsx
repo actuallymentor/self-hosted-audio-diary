@@ -57,16 +57,19 @@ export function RecorderCard( { account_id, on_saved } ) {
     async function toggle_recording() {
         try {
             if( state === `recording` ) {
-                const id = await recorder.current.stop()
-                set_state( `saved_local` )
-                toast.success( `Recording saved on this device` )
-                void sync_outbox( account_id ).then( on_saved )
-                return id
+                await recorder.current.stop()
+                return
             }
 
-            recorder.current = new DurableRecorder( account_id, next => set_state( next.status ) )
+            recorder.current = new DurableRecorder( account_id, next => {
+                set_state( next.status )
+
+                if( next.status === `saved_local` ) {
+                    toast.success( `Recording saved on this device` )
+                    void sync_outbox( account_id ).then( on_saved )
+                }
+            } )
             await recorder.current.start()
-            set_state( `recording` )
         } catch ( error ) {
             set_state( `idle` )
             toast.error( error.message ?? `Microphone could not start` )

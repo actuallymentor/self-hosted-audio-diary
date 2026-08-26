@@ -189,12 +189,37 @@ test( `real Chrome captures, syncs, searches, and relaunches offline`, {
     await page.waitForFunction( () => document.body.textContent.includes( `Saved on this device` ) )
     mark( `offline recording durable locally` )
 
+    await click_text( page, `button`, `Record` )
+    await new Promise( resolve => setTimeout( resolve, 6_000 ) )
+    await page.reload( { waitUntil: `domcontentloaded` } )
+    await page.waitForFunction( () => document.body.textContent.includes( `What happened?` ) )
+    await page.waitForFunction( () => !document.body.textContent.includes( `Recording` ) )
+    const interrupted_statuses = await page.evaluate( async () => {
+        const database = await new Promise( ( resolve, reject ) => {
+            const request = indexedDB.open( `shad_local` )
+
+            request.addEventListener( `success`, () => resolve( request.result ) )
+            request.addEventListener( `error`, () => reject( request.error ) )
+        } )
+        const transaction = database.transaction( `recordings`, `readonly` )
+        const request = transaction.objectStore( `recordings` ).getAll()
+
+        return new Promise( ( resolve, reject ) => {
+            request.addEventListener( `success`, () => resolve( request.result.map( row => row.status ) ) )
+            request.addEventListener( `error`, () => reject( request.error ) )
+        } )
+    } )
+
+    assert.equal( interrupted_statuses.includes( `recording` ), false )
+    assert.equal( interrupted_statuses.includes( `unrecoverable` ), false )
+    mark( `interrupted recording recovered after reload` )
+
     await page.setOfflineMode( false )
     try {
         await page.waitForFunction(
             expected => document.querySelectorAll( `audio` ).length >= expected,
             { timeout: 30_000 },
-            online_audio_count + 1,
+            online_audio_count + 2,
         )
     } catch ( error ) {
         const recordings = await page.evaluate( async () => {

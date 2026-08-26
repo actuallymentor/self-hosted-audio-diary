@@ -13,7 +13,7 @@ const execute_file = promisify( execFile )
 test( `resumes immutable chunks, finalizes media, and serves byte ranges`, async t => {
     const server = await start_test_server()
     t.after( () => server.close() )
-    const { client } = await bootstrap_client( server.base_url )
+    const { client, user } = await bootstrap_client( server.base_url )
     const target = path.join( server.root, `fixture.wav` )
 
     await execute_file( `ffmpeg`, [
@@ -42,35 +42,48 @@ test( `resumes immutable chunks, finalizes media, and serves byte ranges`, async
 
     assert.equal( created.response.status, 200 )
 
-    const part = await client.request( `/api/v1/uploads/${ upload_id }/chunks/0`, {
-        body: bytes,
-        headers: {
-            [`Content-Length`]: String( bytes.length ),
-            [`Content-Type`]: `application/octet-stream`,
-            [`X-Content-SHA256`]: digest,
-        },
-        method: `PUT`,
-    } )
-    const duplicate = await client.request( `/api/v1/uploads/${ upload_id }/chunks/0`, {
-        body: bytes,
-        headers: {
-            [`Content-Length`]: String( bytes.length ),
-            [`Content-Type`]: `application/octet-stream`,
-            [`X-Content-SHA256`]: digest,
-        },
-        method: `PUT`,
-    } )
+    const [ part, duplicate ] = await Promise.all( [ 1, 2 ].map( () =>
+        client.request( `/api/v1/uploads/${ upload_id }/chunks/0`, {
+            body: bytes,
+            headers: {
+                [`Content-Length`]: String( bytes.length ),
+                [`Content-Type`]: `application/octet-stream`,
+                [`X-Content-SHA256`]: digest,
+            },
+            method: `PUT`,
+        } )
+    ) )
 
     assert.equal( part.response.status, 200 )
     assert.equal( duplicate.response.status, 200 )
 
-    const complete = await client.request( `/api/v1/uploads/${ upload_id }/complete`, {
-        json: { chunk_hashes: [ digest ], total_bytes: bytes.length, whole_sha256: digest },
-        method: `POST`,
-    } )
+    const completions = await Promise.all( [ 1, 2 ].map( () =>
+        client.request( `/api/v1/uploads/${ upload_id }/complete`, {
+            json: { chunk_hashes: [ digest ], total_bytes: bytes.length, whole_sha256: digest },
+            method: `POST`,
+        } )
+    ) )
+    const [ complete ] = completions
 
-    assert.equal( complete.response.status, 200 )
+    assert.deepEqual( completions.map( value => value.response.status ), [ 200, 200 ] )
     assert.equal( complete.result.item_id, upload_id )
+
+    const item = server.runtime.database.prepare( `
+        SELECT items.relative_path, days.local_date
+        FROM items JOIN days ON days.id = items.day_id
+        WHERE items.id = ?
+    ` ).get( upload_id )
+    const [ profile ] = await fs.readdir( path.join( server.config.diary_data_path, `users` ) )
+    const canonical = await fs.readFile( path.join(
+        server.config.diary_data_path,
+        `users`,
+        profile,
+        `days`,
+        item.local_date,
+        item.relative_path,
+    ) )
+
+    assert.equal( createHash( `sha256` ).update( canonical ).digest( `hex` ), digest )
 
     const media = await client.request( `/api/v1/media/${ upload_id }`, {
         headers: { Range: `bytes=0-15` },
@@ -91,6 +104,27 @@ test( `resumes immutable chunks, finalizes media, and serves byte ranges`, async
     assert.equal( suffix.response.headers.get( `content-range` ), `bytes ${ bytes.length - 16 }-${ bytes.length - 1 }/${ bytes.length }` )
     assert.equal( overlong.response.status, 206 )
     assert.equal( overlong.response.headers.get( `content-length` ), String( bytes.length ) )
+
+    const original_fetch = globalThis.fetch
+
+    try {
+        globalThis.fetch = async () => Response.json( {
+            language: null,
+            model: `large-v3`,
+            text: ``,
+        } )
+        await server.runtime.job_handlers.transcription( server.runtime, {
+            payload: { item_id: upload_id },
+            user_id: user.id,
+        } )
+    } finally {
+        globalThis.fetch = original_fetch
+    }
+
+    const silent_item = server.runtime.database.prepare( `SELECT display_text FROM items WHERE id = ?` )
+        .get( upload_id )
+
+    assert.equal( silent_item.display_text, `` )
 } )
 
 test( `expires only stale incomplete staging and retains client-retry semantics`, async t => {

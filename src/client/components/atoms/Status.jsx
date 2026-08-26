@@ -20,6 +20,7 @@ const labels = {
     saved_local: `Saved on this device`,
     syncing: `Syncing`,
     transcribing: `Transcribing`,
+    unrecoverable: `Needs attention · kept on device`,
     uploaded: `Safe on server`,
 }
 

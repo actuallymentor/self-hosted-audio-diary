@@ -22,6 +22,17 @@ export async function write_profile( { diary_root, email, role, user_id } ) {
 }
 
 /**
+ * Remove only a fresh, unpublished identity after provisioning compensation.
+ *
+ * @param {object} options
+ */
+export async function remove_provisioning_profile( { diary_root, email, user_id } ) {
+    const root = user_root( diary_root, user_id, email )
+
+    await fs.rm( root, { force: true, recursive: true } )
+}
+
+/**
  * Detect recoverable identities before public bootstrap is offered.
  *
  * @param {string} diary_root

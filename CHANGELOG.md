@@ -12,6 +12,12 @@
 
 ### Fixed
 
+- Recover interrupted captures from validated local chunks after reload.
+- Serialize chunk receipt and final media assembly across concurrent tabs.
+- Roll back failed account provisioning without consuming bootstrap or invites.
+- Preserve tag search and silent transcripts through reprojection and recovery.
+- Bound login pressure without hard-locking accounts or the instance.
+- Keep terminal upload failures local and sanitize public error details.
 - Restore offline sessions and refresh CSRF before outbox replay.
 - Wait for in-flight jobs during shutdown.
 - Serve standards-compliant open, suffix, and overlong byte ranges.

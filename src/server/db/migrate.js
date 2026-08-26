@@ -215,6 +215,12 @@ const migrations = [
       );
     `,
     },
+    {
+        version: 2,
+        sql: `
+            ALTER TABLE uploads ADD COLUMN finalizing_at INTEGER;
+        `,
+    },
 ]
 
 /**

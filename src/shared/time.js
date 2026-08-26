@@ -27,12 +27,28 @@ export function assign_local_day( { timezone, utc } ) {
  * @returns {object}
  */
 export function normalize_capture( input ) {
-    const utc = new Date( input.utc ?? Date.now() ).toISOString()
-    const timezone = input.timezone ?? `UTC`
-    const local_date = assign_local_day( { timezone, utc } )
+    let local_date
+    let timezone
+    let utc
+
+    try {
+        utc = new Date( input.utc ?? Date.now() ).toISOString()
+        timezone = input.timezone ?? `UTC`
+        local_date = assign_local_day( { timezone, utc } )
+    } catch {
+        const error = new Error( `Capture instant or timezone is invalid` )
+
+        error.code = `invalid_capture`
+        error.status_code = 400
+        throw error
+    }
 
     if( input.local_date && input.local_date !== local_date ) {
-        throw new Error( `Local date does not match capture instant and timezone` )
+        const error = new Error( `Local date does not match capture instant and timezone` )
+
+        error.code = `invalid_capture`
+        error.status_code = 400
+        throw error
     }
 
     return {

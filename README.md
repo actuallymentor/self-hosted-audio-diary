@@ -34,6 +34,10 @@ docker compose ps
 Open `http://HOST:3000`. The first account becomes administrator only when both
 the database and archive are empty. Later users require one-use invitations.
 
+Interrupted recordings are rebuilt from validated device chunks after reload.
+Damaged or incomplete captures remain in the device outbox as `Needs attention`;
+SHAD does not delete their local bytes.
+
 Set `APP_PORT` to change the host listener. Do not expose it directly to the
 internet: the operator-owned reverse proxy handles hostname, TLS, redirects,
 certificates, and public security headers.

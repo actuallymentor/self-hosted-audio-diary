@@ -1,7 +1,5 @@
 import { createHash } from "node:crypto"
 
-import { HttpError } from "../http/errors.js"
-
 const window_ms = 15 * 60 * 1000
 
 function bucket_key( scope, value ) {
@@ -9,7 +7,7 @@ function bucket_key( scope, value ) {
 }
 
 /**
- * Enforce global and submitted-identifier buckets without trusting client IPs.
+ * Record global and submitted-identifier pressure and return a bounded delay.
  *
  * @param {import('better-sqlite3').Database} database
  * @param {string} scope
@@ -18,20 +16,19 @@ function bucket_key( scope, value ) {
 export function check_rate_limit( database, scope, submitted_value ) {
     const now = Date.now()
     const buckets = [ bucket_key( scope, `global` ), bucket_key( scope, submitted_value ) ]
-    const limits = [ 100, 10 ]
+    const delay_after = [ 100, 5 ]
+    const delay_steps = [ 25, 100 ]
+    let delay_ms = 0
 
     for( const [ index, bucket ] of buckets.entries() ) {
         const row = database.prepare( `SELECT * FROM login_attempts WHERE bucket = ?` ).get( bucket )
-
-        if( row?.blocked_until > now ) {
-            throw new HttpError( 429, `rate_limited`, `Too many attempts. Try again later.` )
-        }
-
         const attempts = !row || now - row.window_started_at > window_ms ? 1 : row.attempts + 1
         const window_started_at = !row || now - row.window_started_at > window_ms
             ? now
             : row.window_started_at
-        const blocked_until = attempts > limits[index] ? now + window_ms : 0
+        const bounded_delay = Math.min( 1_000, Math.max( 0, attempts - delay_after[index] ) * delay_steps[index] )
+
+        delay_ms = Math.max( delay_ms, bounded_delay )
 
         database.prepare( `
       INSERT INTO login_attempts (bucket, attempts, window_started_at, blocked_until)
@@ -40,12 +37,10 @@ export function check_rate_limit( database, scope, submitted_value ) {
         attempts = excluded.attempts,
         window_started_at = excluded.window_started_at,
         blocked_until = excluded.blocked_until
-    ` ).run( bucket, attempts, window_started_at, blocked_until )
-
-        if( blocked_until ) {
-            throw new HttpError( 429, `rate_limited`, `Too many attempts. Try again later.` )
-        }
+    ` ).run( bucket, attempts, window_started_at, 0 )
     }
+
+    return delay_ms
 }
 
 /**

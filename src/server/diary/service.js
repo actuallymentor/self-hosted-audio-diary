@@ -92,10 +92,7 @@ export async function add_text( runtime, user, input ) {
  * @returns {Promise<string[]>}
  */
 export async function set_tags( runtime, user, local_date, submitted_tags ) {
-    const tags = [ ...new Set( submitted_tags
-        .map( tag => tag.normalize( `NFKC` ).trim().toLowerCase() )
-        .filter( Boolean ) ) ]
-        .sort()
+    const tags = normalize_tags( submitted_tags )
 
     await update_day( {
         diary_root: runtime.config.diary_data_path,
@@ -104,26 +101,49 @@ export async function set_tags( runtime, user, local_date, submitted_tags ) {
         user_id: user.id,
     }, metadata => ( { ...metadata, tags } ) )
 
-    const day_id = `${ user.id }:${ local_date }`
+    project_tags( runtime, user.id, local_date, tags )
+
+    return tags
+}
+
+function normalize_tags( submitted_tags ) {
+    return [ ...new Set( submitted_tags
+        .map( tag => tag.normalize( `NFKC` ).trim().toLowerCase() )
+        .filter( Boolean ) ) ]
+        .sort()
+}
+
+/**
+ * Project canonical day tags without rewriting the archive.
+ *
+ * @param {object} runtime
+ * @param {string} user_id
+ * @param {string} local_date
+ * @param {string[]} submitted_tags
+ * @returns {string[]}
+ */
+export function project_tags( runtime, user_id, local_date, submitted_tags ) {
+    const tags = normalize_tags( submitted_tags )
+    const day_id = `${ user_id }:${ local_date }`
 
     runtime.database.transaction( () => {
-        ensure_day( runtime, user.id, local_date )
+        ensure_day( runtime, user_id, local_date )
         runtime.database.prepare( `DELETE FROM day_tags WHERE day_id = ?` ).run( day_id )
 
         for( const tag of tags ) {
             runtime.database.prepare( `
         INSERT INTO tags (user_id, value) VALUES (?, ?)
         ON CONFLICT(user_id, value) DO NOTHING
-      ` ).run( user.id, tag )
+      ` ).run( user_id, tag )
             const tag_id = runtime.database
                 .prepare( `SELECT id FROM tags WHERE user_id = ? AND value = ?` )
-                .get( user.id, tag ).id
+                .get( user_id, tag ).id
             runtime.database.prepare( `INSERT INTO day_tags (day_id, tag_id) VALUES (?, ?)` ).run( day_id, tag_id )
         }
 
         runtime.database.prepare( `
       UPDATE search_documents SET tags = ? WHERE user_id = ? AND local_date = ?
-    ` ).run( tags.join( ` ` ), user.id, local_date )
+    ` ).run( tags.join( ` ` ), user_id, local_date )
     } )()
 
     return tags
@@ -193,7 +213,6 @@ export function project_item( runtime, user, local_date, item ) {
             content: text,
             item_id: item.id,
             local_date,
-            tags: [],
             type: item.type,
             user_id: user.id,
         } )
@@ -283,7 +302,6 @@ export async function edit_item_text( runtime, user, item_id, text ) {
         content: text.trim(),
         item_id,
         local_date: item.local_date,
-        tags: [],
         type: item.type,
         user_id: user.id,
     } )

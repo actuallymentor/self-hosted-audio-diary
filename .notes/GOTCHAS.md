@@ -9,3 +9,7 @@
   `MediaRecorder`, but large-v3 correctly returns an empty transcript.
 - Failed verification artifacts may be uploaded by CI. Rendered Compose files and
   retained text logs must stay credential-free and be redacted defensively.
+- Active `MediaRecorder` instances hold a Web Lock. Outbox recovery must validate
+  every persisted chunk and never finalize a recording still locked by another tab.
+- Chunk receipt writes and final assembly share one per-upload lock. Splitting those
+  critical sections reintroduces canonical-file corruption under cross-tab replay.

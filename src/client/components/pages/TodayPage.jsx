@@ -119,7 +119,10 @@ export function TodayPage() {
         <RecorderCard account_id={ user.id } on_saved={ refresh } />
         { pending.length > 0 && <Pending aria-live="polite">
             <strong>Device outbox</strong>
-            { pending.map( recording => <p key={ recording.id }><Status value={ recording.status } /></p> ) }
+            { pending.map( recording => <p key={ recording.id }>
+                <Status value={ recording.status } />
+                { recording.status === `unrecoverable` && <> — { recording.last_error }</> }
+            </p> ) }
         </Pending> }
         <TextForm onSubmit={ save_text }>
             <label htmlFor="note"><strong>Write a note</strong></label>

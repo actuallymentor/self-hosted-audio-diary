@@ -30,7 +30,7 @@ export async function create_app( runtime ) {
     // Fastify snapshots inherited error handlers when routes are registered.
     app.setErrorHandler( ( error, request, reply ) => {
         const validation = error instanceof ZodError
-        const status_code = validation ? 400 : error.status_code ?? 500
+        const status_code = validation ? 400 : error.statusCode ?? error.status_code ?? 500
         const code = validation ? `validation_failed` : error.code ?? `internal_error`
 
         if( status_code >= 500 ) {

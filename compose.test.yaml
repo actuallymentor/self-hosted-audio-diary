@@ -22,10 +22,12 @@ services:
       - tests/unit/api_client.test.js
       - tests/unit/archive_paths.test.js
       - tests/unit/backoff.test.js
+      - tests/unit/outbox.test.js
       - tests/unit/time.test.js
       - tests/unit/worker.test.js
       - tests/integration/auth.test.js
       - tests/integration/diary.test.js
+      - tests/integration/jobs.test.js
       - tests/integration/reflection.test.js
       - tests/integration/uploads.test.js
 

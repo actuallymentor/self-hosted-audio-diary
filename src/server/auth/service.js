@@ -2,7 +2,11 @@ import { randomUUID } from "node:crypto"
 
 import argon2 from "argon2"
 
-import { archive_has_profiles, write_profile } from "../archive/profile_store.js"
+import {
+    archive_has_profiles,
+    remove_provisioning_profile,
+    write_profile,
+} from "../archive/profile_store.js"
 import { HttpError } from "../http/errors.js"
 import { digest_token, normalize_email, random_token } from "./crypto.js"
 import { check_rate_limit, clear_rate_limit } from "./rate_limit.js"
@@ -12,6 +16,40 @@ const password_options = {
     parallelism: 1,
     timeCost: 2,
     type: argon2.argon2id,
+}
+
+function delay( milliseconds ) {
+    return new Promise( resolve => setTimeout( resolve, milliseconds ) )
+}
+
+function rollback_bootstrap( runtime, user_id, claimed_at ) {
+    runtime.database.transaction( () => {
+        const removed = runtime.database.prepare( `
+            DELETE FROM users WHERE id = ? AND status = 'provisioning'
+        ` ).run( user_id )
+
+        if( removed.changes ) {
+            runtime.database.prepare( `
+                UPDATE bootstrap_state SET claimed_at = NULL
+                WHERE singleton = 1 AND claimed_at = ?
+            ` ).run( claimed_at )
+        }
+    } )()
+}
+
+function rollback_registration( runtime, user_id, invitation_id, consumed_at ) {
+    runtime.database.transaction( () => {
+        const removed = runtime.database.prepare( `
+            DELETE FROM users WHERE id = ? AND status = 'provisioning'
+        ` ).run( user_id )
+
+        if( removed.changes ) {
+            runtime.database.prepare( `
+                UPDATE invitations SET consumed_at = NULL
+                WHERE id = ? AND consumed_at = ?
+            ` ).run( invitation_id, consumed_at )
+        }
+    } )()
 }
 
 /**
@@ -66,13 +104,23 @@ export async function bootstrap( runtime, { email, password } ) {
         throw new HttpError( 409, `bootstrap_unavailable`, `First-user setup is unavailable.` )
     }
 
-    await write_profile( {
-        diary_root: runtime.config.diary_data_path,
-        email: email.trim(),
-        role: `admin`,
-        user_id,
-    } )
-    runtime.database.prepare( `UPDATE users SET status = 'active' WHERE id = ?` ).run( user_id )
+    try {
+        await write_profile( {
+            diary_root: runtime.config.diary_data_path,
+            email: email.trim(),
+            role: `admin`,
+            user_id,
+        } )
+        runtime.database.prepare( `UPDATE users SET status = 'active' WHERE id = ?` ).run( user_id )
+    } catch {
+        await remove_provisioning_profile( {
+            diary_root: runtime.config.diary_data_path,
+            email: email.trim(),
+            user_id,
+        } ).catch( () => {} )
+        rollback_bootstrap( runtime, user_id, now )
+        throw new HttpError( 503, `provisioning_unavailable`, `Account storage is temporarily unavailable.` )
+    }
 
     return runtime.database.prepare( `SELECT id, email, role FROM users WHERE id = ?` ).get( user_id )
 }
@@ -87,7 +135,7 @@ export async function bootstrap( runtime, { email, password } ) {
 export async function login( runtime, { email, password } ) {
     const email_normalized = normalize_email( email )
 
-    check_rate_limit( runtime.database, `login`, email_normalized )
+    await delay( check_rate_limit( runtime.database, `login`, email_normalized ) )
 
     const user = runtime.database
         .prepare( `SELECT * FROM users WHERE email_normalized = ? AND status = 'active'` )
@@ -192,7 +240,7 @@ export function create_invitation( runtime, admin_id ) {
  * @returns {Promise<object>}
  */
 export async function register( runtime, { email, password, token } ) {
-    check_rate_limit( runtime.database, `invitation`, token )
+    await delay( check_rate_limit( runtime.database, `invitation`, token ) )
 
     const now = Date.now()
     const invitation = runtime.database.prepare( `
@@ -223,13 +271,23 @@ export async function register( runtime, { email, password, token } ) {
         throw new HttpError( 409, `registration_failed`, `That account cannot be registered.` )
     }
 
-    await write_profile( {
-        diary_root: runtime.config.diary_data_path,
-        email: email.trim(),
-        role: `member`,
-        user_id,
-    } )
-    runtime.database.prepare( `UPDATE users SET status = 'active' WHERE id = ?` ).run( user_id )
+    try {
+        await write_profile( {
+            diary_root: runtime.config.diary_data_path,
+            email: email.trim(),
+            role: `member`,
+            user_id,
+        } )
+        runtime.database.prepare( `UPDATE users SET status = 'active' WHERE id = ?` ).run( user_id )
+    } catch {
+        await remove_provisioning_profile( {
+            diary_root: runtime.config.diary_data_path,
+            email: email.trim(),
+            user_id,
+        } ).catch( () => {} )
+        rollback_registration( runtime, user_id, invitation.id, now )
+        throw new HttpError( 503, `provisioning_unavailable`, `Account storage is temporarily unavailable.` )
+    }
     clear_rate_limit( runtime.database, `invitation`, token )
 
     return { email: email.trim(), id: user_id, role: `member` }
