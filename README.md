@@ -1,160 +1,241 @@
 # SHAD — Self-Hosted Audio Diary
 
-Private, archive-first voice journaling. SHAD records in the browser, survives
-offline use, synchronizes resumable uploads, transcribes locally with
-`faster-whisper`, and stores canonical diary content as ordinary files.
+Private voice journaling with offline recording, resumable uploads, local
+multilingual transcription, search, reflections, and ordinary files you can back
+up without SHAD.
 
-Status: `0.1.0` preview. Automated desktop/mobile-PWA gates are implemented;
-physical iPhone and Android testing remains required before `1.0.0`.
+Status: `0.1.0` preview. Images support `linux/amd64` and `linux/arm64`. Physical
+iPhone and Android validation remains required before `1.0.0`.
 
-## Stack
+## Requirements
 
-- `app`: React PWA, Fastify API, SQLite/FTS5, background jobs, reflection, TTS.
-- `transcriber`: pinned multilingual `large-v3`, CPU INT8, one serialized worker.
-- Plain HTTP only. Put the stack behind your existing TLS reverse proxy.
-- Two independent bind mounts: operational app data and the human-readable diary.
+- Docker Engine with Compose v2.
+- About 8 GiB free during first pull and model setup.
+- A persistent host with roughly 16 GiB RAM recommended for `large-v3`.
+- A reverse proxy with HTTPS for internet-facing installs.
 
-Primary target: x86-64 Intel NUC, 16 GiB RAM. Published images also target ARM64.
-The first model load downloads roughly 3 GiB into the persistent model cache.
+The first transcription start downloads roughly 3 GiB into the model cache.
+English, Dutch, and mixed-language recordings are detected automatically.
 
-## Quick start
+## Install
 
-Requirements: Docker Engine with Compose v2, writable host directories, and
-roughly 8 GiB free disk during first build/model download.
+Create an empty directory and save this as `compose.yaml`:
+
+```yaml
+name: shad
+
+services:
+  app:
+    image: actuallymentor/self-hosted-audio-diary:0.1.0
+    restart: unless-stopped
+    init: true
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    environment:
+      APP_DATA_PATH: /data/app
+      APP_GID: ${APP_GID:-10001}
+      APP_PORT: 3000
+      APP_UID: ${APP_UID:-10001}
+      DIARY_DATA_PATH: /data/diary
+      NODE_ENV: production
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_REFLECTION_MODEL: ${OPENROUTER_MODEL:-anthropic/claude-sonnet-4.6}
+      OPENROUTER_TTS_FORMAT: ${TTS_RESPONSE_FORMAT:-pcm}
+      OPENROUTER_TTS_MODEL: ${TTS_MODEL:-google/gemini-3.1-flash-tts-preview}
+      OPENROUTER_TTS_VOICE: ${TTS_VOICE:-Sulafat}
+      OPENROUTER_ZDR: ${OPENROUTER_ZDR_ONLY:-true}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      SESSION_TTL_DAYS: ${SESSION_TTL_DAYS:-30}
+      TRANSCRIPTION_MODEL: large-v3
+      TRANSCRIPTION_URL: http://transcriber:8000
+      UPLOAD_TTL_DAYS: ${UPLOAD_TTL_DAYS:-30}
+    volumes:
+      - ${APP_DATA_PATH:-./data/app}:/data/app
+      - ${DIARY_DATA_PATH:-./data/diary}:/data/diary
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health/ready').then(r=>{if(!r.ok)process.exit(1)})"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    depends_on:
+      transcriber:
+        condition: service_started
+
+  transcriber:
+    image: actuallymentor/self-hosted-audio-diary-transcriber:0.1.0
+    restart: unless-stopped
+    init: true
+    environment:
+      APP_GID: ${APP_GID:-10001}
+      APP_UID: ${APP_UID:-10001}
+      HF_TOKEN: ${HF_TOKEN:-}
+      MODEL_CACHE_PATH: /var/lib/transcriber/huggingface
+      TRANSCRIPTION_COMPUTE_TYPE: ${TRANSCRIPTION_COMPUTE_TYPE:-int8}
+      TRANSCRIPTION_CPU_THREADS: ${TRANSCRIPTION_CPU_THREADS:-auto}
+      TRANSCRIPTION_MODEL: Systran/faster-whisper-large-v3
+      TRANSCRIPTION_MODEL_REVISION: ${TRANSCRIPTION_MODEL_REVISION:-edaa852ec7e145841d8ffdb056a99866b5f0a478}
+    volumes:
+      - ${TRANSCRIPTION_MODEL_CACHE_PATH:-./data/models}:/var/lib/transcriber/huggingface
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+```
+
+Create `.env` beside it:
+
+```dotenv
+APP_PORT=3000
+APP_UID=10001
+APP_GID=10001
+
+APP_DATA_PATH=./data/app
+DIARY_DATA_PATH=./data/diary
+TRANSCRIPTION_MODEL_CACHE_PATH=./data/models
+
+# Use true when users reach SHAD through HTTPS.
+SESSION_COOKIE_SECURE=false
+
+# Optional: enables reflections and spoken reflections.
+OPENROUTER_API_KEY=
+OPENROUTER_MODEL=anthropic/claude-sonnet-4.6
+OPENROUTER_ZDR_ONLY=true
+TTS_MODEL=google/gemini-3.1-flash-tts-preview
+TTS_VOICE=Sulafat
+TTS_RESPONSE_FORMAT=pcm
+```
+
+Create writable storage, pull the published images, and start SHAD:
 
 ```bash
-cp .env.example .env
 mkdir -p data/app data/diary data/models
 sudo chown -R 10001:10001 data/app data/diary data/models
 chmod 600 .env
-docker compose up --detach --build
+docker compose pull
+docker compose up --detach --wait
 docker compose ps
 ```
 
-Open `http://HOST:3000`. The first account becomes administrator only when both
-the database and archive are empty. Later users require one-use invitations.
+Open `http://localhost:3000` on the Docker host or use the HTTPS URL from your
+reverse proxy. The first account becomes administrator only when both the database
+and diary archive are empty. Create later accounts with one-use invitations from
+Settings.
 
-Interrupted recordings are rebuilt from validated device chunks after reload.
-Damaged or incomplete captures remain in the device outbox as `Needs attention`;
-SHAD does not delete their local bytes.
+## Daily use
 
-Set `APP_PORT` to change the host listener. Do not expose it directly to the
-internet: the operator-owned reverse proxy handles hostname, TLS, redirects,
-certificates, and public security headers.
+- Press Record, speak, then stop. Audio is saved locally before upload begins.
+- Add text, images, or video to the same day.
+- Search diary text, transcripts, and tags.
+- Create reflections across a date range. Speech requires `OPENROUTER_API_KEY`.
+- Install the PWA from its in-app Install button or browser menu.
+
+Recordings survive offline use, reloads, and interrupted uploads. Valid local
+chunks resume when connectivity returns. Damaged captures stay in the device
+outbox as `Needs attention`; SHAD does not delete their bytes.
+
+## Network and HTTPS
+
+SHAD serves plain HTTP on `APP_PORT`. Keep that port private and terminate public
+TLS at your reverse proxy. Forward `Host` and `X-Forwarded-Proto`.
+
+Browsers allow microphone capture and full PWA behavior only in a secure context.
+Use HTTPS from phones and other computers; plain HTTP works only through the
+browser's localhost exception on the Docker host.
+
+Set `SESSION_COOKIE_SECURE=true` when the browser-facing URL is HTTPS. Leave it
+`false` only for direct HTTP on a trusted network.
 
 ## Configuration
 
-Copy [`.env.example`](./.env.example); it is the canonical variable reference.
-Important values:
-
 | Variable | Purpose | Default |
 | --- | --- | --- |
-| `APP_DATA_PATH` | SQLite, jobs, sessions, derived indexes | `./data/app` |
-| `DIARY_DATA_PATH` | Canonical media, notes, transcripts, metadata | `./data/diary` |
-| `TRANSCRIPTION_MODEL_CACHE_PATH` | Persistent Hugging Face model cache | `./data/models` |
-| `APP_UID` / `APP_GID` | Runtime ownership for all bind mounts | `10001` |
-| `APP_PORT` | Host-side plain HTTP port | `3000` |
-| `SESSION_COOKIE_SECURE` | Mark sessions HTTPS-only at the browser | `false` |
-| `OPENROUTER_API_KEY` | Optional reflection and speech | empty |
+| `APP_PORT` | Host listener | `3000` |
+| `APP_UID` / `APP_GID` | Container file ownership | `10001` |
+| `APP_DATA_PATH` | SQLite, sessions, jobs, indexes | `./data/app` |
+| `DIARY_DATA_PATH` | Canonical notes, media, transcripts | `./data/diary` |
+| `TRANSCRIPTION_MODEL_CACHE_PATH` | Persistent large-v3 cache | `./data/models` |
+| `TRANSCRIPTION_CPU_THREADS` | CPU threads; reserves one physical core | `auto` |
+| `SESSION_COOKIE_SECURE` | HTTPS-only browser session cookie | `false` |
+| `SESSION_TTL_DAYS` | Login lifetime | `30` |
+| `UPLOAD_TTL_DAYS` | Incomplete upload retention | `30` |
+| `OPENROUTER_API_KEY` | Optional reflection and speech access | empty |
 | `OPENROUTER_MODEL` | Reflection model | Claude Sonnet 4.6 |
-| `TTS_MODEL` / `TTS_VOICE` | Speech model and provider voice | Gemini / Sulafat |
+| `TTS_MODEL` / `TTS_VOICE` | Speech model and voice | Gemini / Sulafat |
+| `OPENROUTER_ZDR_ONLY` | Request zero-data-retention routing | `true` |
 
-OpenRouter features are optional. Recording, archive access, search, and local
-transcription continue when the provider is absent. `OPENROUTER_ZDR_ONLY=true`
-requests zero-data-retention routing.
+Recording, search, archive access, and local transcription work without
+OpenRouter.
 
-Set `SESSION_COOKIE_SECURE=true` for a public HTTPS origin unless the reverse
-proxy explicitly adds the `Secure` cookie attribute. Keep `false` only for direct
-plain-HTTP access on a trusted network.
+## Data and backups
 
-Compose passes an explicit environment allowlist. Registry credentials never
-enter application containers; `HF_TOKEN` enters only the transcriber.
-
-## Archive contract
-
-The filesystem is canonical; SQLite is replaceable operational state.
+The diary filesystem is canonical. SQLite is replaceable operational state.
 
 ```text
-data/diary/
-├── .incoming/<user-id>/<upload-id>/
-└── users/<safe-email>--<stable-user-id>/
-    ├── profile.json
-    ├── days/YYYY-MM-DD/
-    │   ├── metadata.json
-    │   ├── audio/
-    │   ├── images/
-    │   ├── video/
-    │   ├── text/
-    │   └── transcripts/
-    ├── reflections/YYYY/
-    └── .trash/
+data/
+├── app/                       # accounts, sessions, jobs, derived indexes
+├── models/                    # reusable large-v3 cache
+└── diary/
+    ├── .incoming/             # resumable upload staging
+    └── users/<account>/
+        ├── profile.json
+        ├── days/YYYY-MM-DD/   # metadata, media, notes, transcripts
+        ├── reflections/YYYY/
+        └── .trash/
 ```
 
-Back up `APP_DATA_PATH` and `DIARY_DATA_PATH` independently. The diary remains
-browsable without SHAD; retaining app data preserves accounts and sessions.
-
-## Maintenance and recovery
-
-Maintenance commands run with the production image and mounted archive:
+Back up `data/app` and `data/diary` together. For a simple consistent backup:
 
 ```bash
+docker compose stop
+tar -czf shad-backup.tgz data/app data/diary
+docker compose start
+```
+
+Deletion moves files into each account's `.trash`; it does not erase them
+immediately. Never edit `.incoming` while uploads are active.
+
+## Recovery
+
+Run maintenance commands with the same mounted archive:
+
+```bash
+# Rebuild database projections from the human-readable archive.
 docker compose run --rm --no-deps app npm run reconcile
+
+# Rebuild only full-text search indexes.
 docker compose run --rm --no-deps app npm run rebuild-index
-docker compose run --rm --no-deps app npm run recover-accounts -- --admin-email=owner@example.com
+
+# Re-establish an administrator after database loss.
+docker compose run --rm --no-deps app \
+  npm run recover-accounts -- --admin-email=owner@example.com
 ```
 
-- `reconcile`: rebuild users, days, items, jobs, and derived state from the archive.
-- `rebuild-index`: replace only derived FTS data.
-- `recover-accounts`: re-establish an administrator after database loss; recovered
-  identities remain pending until explicitly claimed.
+Recovered identities remain pending until explicitly claimed.
 
-Deletion moves canonical files into per-user `.trash`; it does not immediately
-erase them. Never edit `.incoming` while uploads are active.
+## Update
 
-## Verification
-
-Node.js 24 and Docker Compose are required on the verification host.
+Change both image tags in `compose.yaml` to the same published version, then:
 
 ```bash
-npm ci
-cp .env.example .env            # use live credentials only when intended
-./scripts/verify
+docker compose pull
+docker compose up --detach --wait --remove-orphans
 ```
 
-`scripts/verify` builds production images, runs unit/integration tests inside the
-app image, starts clean isolated volumes, loads real `large-v3`, drives native
-Chrome/MediaRecorder through online and offline journeys, interrupts services
-with queued jobs, optionally tests live OpenRouter reflection/TTS, destroys and
-rebuilds the database from the archive, emits redacted failure artifacts, and
-tears down on success.
+Use versioned tags for repeatable installs. `latest` tracks the newest published
+preview and may change.
 
-Enable paid/live provider gates explicitly:
-
-```dotenv
-RUN_OPENROUTER_TESTS=true
-RUN_TTS_TESTS=true
-OPENROUTER_API_KEY=...
-```
-
-Run two consecutive clean-volume verifications before publishing. Failed runs
-remain under `.test-runtime/verify-*/`; successful runs remove their runtime.
-
-Focused commands:
+## Troubleshooting
 
 ```bash
-npm run lint:check
-npm test
-npm run test:e2e
-npm run test:live
-npm run build
-npm audit
+docker compose ps
+docker compose logs --tail=200 app
+docker compose logs --tail=200 transcriber
 ```
 
-## Release
-
-`package.json` owns the version. The verifier checks API, Compose image tags, and
-OCI labels against it. Publishing occurs only from a GitHub release whose tag is
-exactly `v${package.version}`. CI publishes exact SemVer plus `latest` for both
-application and transcriber manifests.
-
-Do not push, tag, or publish from the verification script.
+- `permission denied`: re-run `chown` with the configured `APP_UID:APP_GID`.
+- Transcription unavailable after first start: large-v3 may still be downloading.
+- Login loops behind HTTPS: set `SESSION_COOKIE_SECURE=true` and restart `app`.
+- Reflection or speech unavailable: verify `OPENROUTER_API_KEY`; diary capture and
+  local transcription remain available.

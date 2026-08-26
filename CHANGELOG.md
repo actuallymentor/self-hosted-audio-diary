@@ -10,6 +10,10 @@
 - Add production Compose, multi-architecture CI, and release automation.
 - Add real-browser, outage, provider, recovery, and secret-boundary gates.
 
+### Changed
+
+- Publish versioned images and lead documentation with operator deployment.
+
 ### Fixed
 
 - Recover interrupted captures from validated local chunks after reload.

@@ -22,3 +22,6 @@
   starts, malformed archive shapes, and multilingual live assertions were corrected.
   Two unchanged 27-test full verifiers (`172955-30853`, `173757-32282`) passed
   browser interruption, restart, live provider, reconciliation, and cleanup gates.
+- 2026-08-26 — Distribution scope corrected: publish only through the reproducible
+  GitHub Actions release workflow, then validate registry-pulled images. Operator
+  documentation now leads with a copyable published-image Compose deployment.
