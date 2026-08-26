@@ -12,7 +12,7 @@
 
 ### Changed
 
-- Publish versioned images and lead documentation with operator deployment.
+- Publish and validate versioned images, then lead documentation with operator deployment.
 
 ### Fixed
 

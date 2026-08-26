@@ -56,6 +56,9 @@ jobs:
   publish:
     needs: verify
     runs-on: ubuntu-24.04
+    outputs:
+      app_digest: ${{ steps.app.outputs.digest }}
+      transcriber_digest: ${{ steps.transcriber.outputs.digest }}
     steps:
       - name: Check out published tag
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -79,6 +82,7 @@ jobs:
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
 
       - name: Publish application manifest
+        id: app
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           build-args: APP_VERSION=${{ needs.verify.outputs.version }}
@@ -90,6 +94,7 @@ jobs:
             ${{ vars.DOCKERHUB_APP_IMAGE }}:latest
 
       - name: Publish transcriber manifest
+        id: transcriber
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           build-args: APP_VERSION=${{ needs.verify.outputs.version }}
@@ -99,3 +104,101 @@ jobs:
           tags: |
             ${{ vars.DOCKERHUB_TRANSCRIBER_IMAGE }}:${{ needs.verify.outputs.version }}
             ${{ vars.DOCKERHUB_TRANSCRIBER_IMAGE }}:latest
+
+  validate-published:
+    needs: [verify, publish]
+    runs-on: ubuntu-24.04
+    env:
+      APP_DIGEST: ${{ needs.publish.outputs.app_digest }}
+      APP_IMAGE: ${{ vars.DOCKERHUB_APP_IMAGE }}
+      TRANSCRIBER_DIGEST: ${{ needs.publish.outputs.transcriber_digest }}
+      TRANSCRIBER_IMAGE: ${{ vars.DOCKERHUB_TRANSCRIBER_IMAGE }}
+      VERSION: ${{ needs.verify.outputs.version }}
+    steps:
+      - name: Sign in to Docker Hub
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
+
+      - name: Verify published manifests
+        run: |
+          verify_manifest() {
+            image=$1
+            digest=$2
+            manifest=$(docker buildx imagetools inspect --raw "$image@$digest")
+
+            jq -e '
+              any(.manifests[]; .platform.os == "linux" and .platform.architecture == "amd64") and
+              any(.manifests[]; .platform.os == "linux" and .platform.architecture == "arm64")
+            ' <<<"$manifest" >/dev/null
+
+            test "$(docker buildx imagetools inspect --raw "$image:$VERSION")" = "$manifest"
+            test "$(docker buildx imagetools inspect --raw "$image:latest")" = "$manifest"
+          }
+
+          verify_manifest "$APP_IMAGE" "$APP_DIGEST"
+          verify_manifest "$TRANSCRIBER_IMAGE" "$TRANSCRIBER_DIGEST"
+
+      - name: Pull published native images
+        run: |
+          verify_label() {
+            image=$1
+            version=$(
+              docker image inspect "$image" \
+                --format '{{index .Config.Labels "org.opencontainers.image.version"}}'
+            )
+
+            test "$version" = "$VERSION"
+          }
+
+          docker pull "$APP_IMAGE:$VERSION"
+          docker pull "$TRANSCRIBER_IMAGE:$VERSION"
+
+          verify_label "$APP_IMAGE:$VERSION"
+          verify_label "$TRANSCRIBER_IMAGE:$VERSION"
+
+          docker run --rm --entrypoint node "$APP_IMAGE:$VERSION" \
+            -e "Promise.all([import('argon2'), import('better-sqlite3')])"
+          docker run --rm --entrypoint python "$TRANSCRIBER_IMAGE:$VERSION" \
+            -c "import av, ctranslate2, faster_whisper"
+
+      - name: Boot published services
+        run: |
+          docker volume create shad-published-app >/dev/null
+          docker volume create shad-published-diary >/dev/null
+          docker volume create shad-published-models >/dev/null
+
+          docker run --detach --name shad-published-app \
+            --publish 127.0.0.1:3000:3000 \
+            --volume shad-published-app:/data/app \
+            --volume shad-published-diary:/data/diary \
+            "$APP_IMAGE:$VERSION"
+
+          docker run --detach --name shad-published-transcriber \
+            --env TRANSCRIPTION_OFFLINE=true \
+            --publish 127.0.0.1:8000:8000 \
+            --volume shad-published-models:/var/lib/transcriber/huggingface \
+            "$TRANSCRIBER_IMAGE:$VERSION"
+
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:3000/health/ready | jq -e '.status == "ok"' >/dev/null && \
+              curl --fail --silent http://127.0.0.1:8000/healthz | jq -e '.status == "ok"' >/dev/null; then
+              exit 0
+            fi
+
+            sleep 2
+          done
+
+          docker logs shad-published-app
+          docker logs shad-published-transcriber
+          exit 1
+
+      - name: Clean published-image smoke test
+        if: always()
+        run: |
+          docker rm --force shad-published-app shad-published-transcriber 2>/dev/null || true
+          docker volume rm shad-published-app shad-published-diary shad-published-models 2>/dev/null || true

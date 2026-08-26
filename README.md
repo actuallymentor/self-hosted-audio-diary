@@ -223,8 +223,8 @@ docker compose pull
 docker compose up --detach --wait --remove-orphans
 ```
 
-Use versioned tags for repeatable installs. `latest` tracks the newest published
-preview and may change.
+Use versioned tags for controlled upgrades. `latest` tracks the newest published
+preview and may change; pin the published manifest digest when immutability matters.
 
 ## Troubleshooting
 

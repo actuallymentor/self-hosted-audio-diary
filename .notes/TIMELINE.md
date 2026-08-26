@@ -25,3 +25,5 @@
 - 2026-08-26 — Distribution scope corrected: publish only through the reproducible
   GitHub Actions release workflow, then validate registry-pulled images. Operator
   documentation now leads with a copyable published-image Compose deployment.
+- 2026-08-26 — Independent review added post-publish registry validation and caught
+  a clean-runner image-name mismatch before the first release.
