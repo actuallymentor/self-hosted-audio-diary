@@ -6,6 +6,18 @@ import { diary_database } from "../storage/database.js"
 export const recording_lock_prefix = `shad:recording:`
 const active_recordings = new Set()
 
+function deferred() {
+    // Keep capture start compatible with browsers predating Promise.withResolvers.
+    let reject
+    let resolve
+    const promise = new Promise( ( resolve_promise, reject_promise ) => {
+        reject = reject_promise
+        resolve = resolve_promise
+    } )
+
+    return { promise, reject, resolve }
+}
+
 /**
  * Check this tab's live capture registry when Web Locks are unavailable.
  *
@@ -114,10 +126,9 @@ export class DurableRecorder {
         const [ recorder_mime ] = this.recorder.mimeType.split( `;` )
         this.mime = recorder_mime
 
-        await this.hold_recording_lock()
-        active_recordings.add( this.id )
-
         try {
+            await this.hold_recording_lock()
+            active_recordings.add( this.id )
             await diary_database.recordings.put( {
                 account_id: this.account_id,
                 attempts: 0,
@@ -247,8 +258,8 @@ export class DurableRecorder {
     async hold_recording_lock() {
         if( !navigator.locks?.request ) return
 
-        const ready = Promise.withResolvers()
-        const holding = Promise.withResolvers()
+        const ready = deferred()
+        const holding = deferred()
 
         this.release_recording_lock = holding.resolve
         this.recording_lock_task = navigator.locks.request(

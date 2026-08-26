@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import fs from "node:fs/promises"
 import path from "node:path"
 import test from "node:test"
 
@@ -68,6 +69,35 @@ test( `persists, searches, edits, tags, trashes, and restores canonical text`, a
     assert.equal( recovered_day.result.items[0].text, `Walked beside the bright canal.` )
     assert.deepEqual( recovered_day.result.tombstones, [] )
 
+    const later_item_id = crypto.randomUUID()
+
+    await client.request( `/api/v1/days/2026-08-26/text`, {
+        json: {
+            capture: {
+                local_date: `2026-08-26`,
+                offset_minutes: 0,
+                timezone: `UTC`,
+                utc: `2026-08-26T12:00:00.000Z`,
+            },
+            item_id: later_item_id,
+            text: `A later day must survive malformed tags.`,
+        },
+        method: `POST`,
+    } )
+    const [ profile ] = await fs.readdir( path.join( server.config.diary_data_path, `users` ) )
+    const malformed_metadata_path = path.join(
+        server.config.diary_data_path,
+        `users`,
+        profile,
+        `days`,
+        `2026-08-26`,
+        `metadata.json`,
+    )
+    const malformed_metadata = JSON.parse( await fs.readFile( malformed_metadata_path, `utf8` ) )
+
+    malformed_metadata.tags = { unexpected: true }
+    await fs.writeFile( malformed_metadata_path, `${ JSON.stringify( malformed_metadata, null, 2 ) }\n` )
+
     const recovered_app = path.join( server.root, `recovered-app` )
     const recovered_runtime = create_runtime( {
         ...server.config,
@@ -77,11 +107,15 @@ test( `persists, searches, edits, tags, trashes, and restores canonical text`, a
     } )
 
     t.after( () => recovered_runtime.database.close() )
-    await reconcile_archive( recovered_runtime )
+    const report = await reconcile_archive( recovered_runtime )
 
     const recovered_tags = recovered_runtime.search.search( recovered_runtime, user.id, { query: `travel` } )
+    const recovered_later_item = recovered_runtime.database.prepare( `SELECT id FROM items WHERE id = ?` )
+        .get( later_item_id )
 
     assert.equal( recovered_tags[0].item_id, item_id )
+    assert.equal( recovered_later_item.id, later_item_id )
+    assert.ok( report.conflicts.some( conflict => conflict.reason === `invalid_tags` ) )
 } )
 
 test( `invalid capture semantics return a client error`, async t => {

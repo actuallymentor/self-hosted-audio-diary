@@ -18,7 +18,7 @@ let retry_timer = null
  */
 export function sync_failure_status( error ) {
     if( error.status === 401 ) return `needs_auth`
-    if( [ `upload_finalizing`, `upload_incomplete` ].includes( error.code ) ) return `retry`
+    if( [ `csrf_rejected`, `upload_finalizing`, `upload_incomplete` ].includes( error.code ) ) return `retry`
     if( error.status >= 400 && error.status < 500 && ![ 408, 425, 429 ].includes( error.status ) ) {
         return `unrecoverable`
     }

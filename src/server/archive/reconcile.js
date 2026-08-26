@@ -68,7 +68,19 @@ export async function reconcile_archive( runtime ) {
 
             report.days += 1
             ensure_day( runtime, profile.user_id, local_date )
-            project_tags( runtime, profile.user_id, local_date, metadata.tags ?? [] )
+            const valid_tags = Array.isArray( metadata.tags )
+                && metadata.tags.every( tag => typeof tag === `string` )
+
+            if( !valid_tags ) {
+                report.conflicts.push( { local_date, reason: `invalid_tags` } )
+            }
+
+            project_tags(
+                runtime,
+                profile.user_id,
+                local_date,
+                valid_tags ? metadata.tags : [],
+            )
 
             for( const item of metadata.items ?? [] ) {
                 try {

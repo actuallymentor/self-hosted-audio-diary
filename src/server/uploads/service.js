@@ -420,3 +420,16 @@ export async function cleanup_expired_uploads( runtime ) {
 
     return expired.length
 }
+
+/**
+ * Clear finalization claims that cannot survive a single-replica process restart.
+ *
+ * @param {object} runtime
+ * @returns {number}
+ */
+export function recover_interrupted_finalizations( runtime ) {
+    return runtime.database.prepare( `
+        UPDATE uploads SET finalizing_at = NULL
+        WHERE status = 'receiving' AND finalizing_at IS NOT NULL
+    ` ).run().changes
+}

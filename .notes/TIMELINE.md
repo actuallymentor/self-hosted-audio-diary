@@ -10,3 +10,7 @@
   capture recovery, upload finalization concurrency, provisioning rollback, bounded
   auth delays, tag reprojection, silent transcripts, and safe API error boundaries.
   The corrected 25-test gate and full clean-volume verifier then passed twice.
+- 2026-08-26 — Follow-up review hardened concurrent authentication, transient CSRF
+  replay, malformed-tag reconciliation, older-browser recorder cleanup, and restart
+  recovery of incomplete finalization claims. The expanded 26-test full verifier
+  passed twice from clean isolated volumes.

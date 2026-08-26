@@ -5,6 +5,7 @@ import { create_runtime } from "./runtime/create_runtime.js"
 
 const config = read_config()
 const runtime = create_runtime( config )
+runtime.uploads.recover_interrupted_finalizations( runtime )
 await runtime.uploads.cleanup_expired_uploads( runtime )
 const app = await create_app( runtime )
 const stop_worker = start_worker( runtime )

@@ -9,17 +9,13 @@ import {
 } from "../archive/profile_store.js"
 import { HttpError } from "../http/errors.js"
 import { digest_token, normalize_email, random_token } from "./crypto.js"
-import { check_rate_limit, clear_rate_limit } from "./rate_limit.js"
+import { clear_rate_limit, with_rate_limit } from "./rate_limit.js"
 
 const password_options = {
     memoryCost: 19_456,
     parallelism: 1,
     timeCost: 2,
     type: argon2.argon2id,
-}
-
-function delay( milliseconds ) {
-    return new Promise( resolve => setTimeout( resolve, milliseconds ) )
 }
 
 function rollback_bootstrap( runtime, user_id, claimed_at ) {
@@ -135,20 +131,20 @@ export async function bootstrap( runtime, { email, password } ) {
 export async function login( runtime, { email, password } ) {
     const email_normalized = normalize_email( email )
 
-    await delay( check_rate_limit( runtime.database, `login`, email_normalized ) )
+    return with_rate_limit( runtime.database, `login`, email_normalized, async () => {
+        const user = runtime.database
+            .prepare( `SELECT * FROM users WHERE email_normalized = ? AND status = 'active'` )
+            .get( email_normalized )
+        const valid = user ? await argon2.verify( user.password_hash, password ) : false
 
-    const user = runtime.database
-        .prepare( `SELECT * FROM users WHERE email_normalized = ? AND status = 'active'` )
-        .get( email_normalized )
-    const valid = user ? await argon2.verify( user.password_hash, password ) : false
+        if( !valid ) {
+            throw new HttpError( 401, `invalid_credentials`, `Email or password is incorrect.` )
+        }
 
-    if( !valid ) {
-        throw new HttpError( 401, `invalid_credentials`, `Email or password is incorrect.` )
-    }
+        clear_rate_limit( runtime.database, `login`, email_normalized )
 
-    clear_rate_limit( runtime.database, `login`, email_normalized )
-
-    return { email: user.email, id: user.id, role: user.role }
+        return { email: user.email, id: user.id, role: user.role }
+    } )
 }
 
 /**
@@ -240,8 +236,12 @@ export function create_invitation( runtime, admin_id ) {
  * @returns {Promise<object>}
  */
 export async function register( runtime, { email, password, token } ) {
-    await delay( check_rate_limit( runtime.database, `invitation`, token ) )
+    return with_rate_limit( runtime.database, `invitation`, token, () =>
+        register_under_limit( runtime, { email, password, token } )
+    )
+}
 
+async function register_under_limit( runtime, { email, password, token } ) {
     const now = Date.now()
     const invitation = runtime.database.prepare( `
     SELECT * FROM invitations

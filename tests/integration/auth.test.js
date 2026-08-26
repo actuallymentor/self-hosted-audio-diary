@@ -4,6 +4,7 @@ import path from "node:path"
 import test from "node:test"
 
 import { write_profile } from "../../src/server/archive/profile_store.js"
+import { with_rate_limit } from "../../src/server/auth/rate_limit.js"
 import { start_test_server, test_client } from "../support/test_server.js"
 
 test( `only one concurrent first user becomes administrator`, async t => {
@@ -222,4 +223,28 @@ test( `Fastify parser errors preserve their client status`, async t => {
     } )
 
     assert.equal( response.status, 400 )
+} )
+
+test( `authentication capacity serializes identifiers and bounds global work`, async t => {
+    const server = await start_test_server()
+    t.after( () => server.close() )
+    let active = 0
+    let maximum_active = 0
+    const work = async () => {
+        active += 1
+        maximum_active = Math.max( maximum_active, active )
+        await new Promise( resolve => setTimeout( resolve, 20 ) )
+        active -= 1
+    }
+
+    await Promise.all( Array.from( { length: 5 }, () =>
+        with_rate_limit( server.runtime.database, `same`, `owner@example.com`, work )
+    ) )
+    assert.equal( maximum_active, 1 )
+
+    maximum_active = 0
+    await Promise.all( Array.from( { length: 8 }, ( _, index ) =>
+        with_rate_limit( server.runtime.database, `global`, `person-${ index }`, work )
+    ) )
+    assert.equal( maximum_active, 4 )
 } )

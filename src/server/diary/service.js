@@ -107,7 +107,11 @@ export async function set_tags( runtime, user, local_date, submitted_tags ) {
 }
 
 function normalize_tags( submitted_tags ) {
-    return [ ...new Set( submitted_tags
+    const valid_tags = Array.isArray( submitted_tags )
+        ? submitted_tags.filter( tag => typeof tag === `string` )
+        : []
+
+    return [ ...new Set( valid_tags
         .map( tag => tag.normalize( `NFKC` ).trim().toLowerCase() )
         .filter( Boolean ) ) ]
         .sort()

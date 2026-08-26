@@ -13,3 +13,7 @@
   every persisted chunk and never finalize a recording still locked by another tab.
 - Chunk receipt writes and final assembly share one per-upload lock. Splitting those
   critical sections reintroduces canonical-file corruption under cross-tab replay.
+- Authentication delays must hold a per-identifier FIFO and global capacity slot;
+  sleeping independent requests lets a parallel flood bypass the bucket.
+- Only production server startup clears interrupted upload-finalization claims.
+  Maintenance runtimes may coexist with the live app and must not clear its claim.

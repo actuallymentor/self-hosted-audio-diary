@@ -158,6 +158,17 @@ test( `expires only stale incomplete staging and retains client-retry semantics`
         },
         method: `PUT`,
     } )
+    server.runtime.database.prepare( `UPDATE uploads SET finalizing_at = ? WHERE id = ?` )
+        .run( Date.now(), upload_id )
+
+    const recovered = server.runtime.uploads.recover_interrupted_finalizations( server.runtime )
+    const { finalizing_at } = server.runtime.database
+        .prepare( `SELECT finalizing_at FROM uploads WHERE id = ?` )
+        .get( upload_id )
+
+    assert.equal( recovered, 1 )
+    assert.equal( finalizing_at, null )
+
     server.runtime.database.prepare( `UPDATE uploads SET updated_at = 0 WHERE id = ?` ).run( upload_id )
 
     const removed = await server.runtime.uploads.cleanup_expired_uploads( server.runtime )
