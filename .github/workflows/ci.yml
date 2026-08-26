@@ -25,6 +25,11 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
 
+      - name: Install media test dependency
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends ffmpeg
+
       - run: npm ci
       - run: npm run lint:check
       - run: npm test

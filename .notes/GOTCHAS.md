@@ -20,3 +20,6 @@
   parallel flood starve valid callers.
 - Only production server startup clears interrupted upload-finalization claims.
   Maintenance runtimes may coexist with the live app and must not clear its claim.
+- GitHub's `ubuntu-24.04` quality runner does not guarantee `ffmpeg` is installed.
+  Provision it before host-side media integration tests; the production image
+  already includes it.

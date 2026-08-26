@@ -13,6 +13,7 @@
 ### Changed
 
 - Publish and validate versioned images, then lead documentation with operator deployment.
+- Provision ffmpeg before CI media integration tests.
 
 ### Fixed
 
