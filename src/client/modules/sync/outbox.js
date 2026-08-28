@@ -145,8 +145,26 @@ async function coalesce_parts( chunks, target_size = 2 * 1024 * 1024 ) {
     } ) )
 }
 
+async function mark_recording_uploaded( recording ) {
+    await diary_database.transaction(
+        `rw`,
+        diary_database.chunks,
+        diary_database.recordings,
+        async () => {
+            await diary_database.chunks.where( `recording_id` ).equals( recording.id ).delete()
+            await diary_database.recordings.update( recording.id, {
+                status: `uploaded`,
+                uploaded_bytes: recording.byte_size,
+            } )
+        },
+    )
+}
+
 async function sync_recording( recording ) {
-    await diary_database.recordings.update( recording.id, { status: `syncing` } )
+    await diary_database.recordings.update( recording.id, {
+        status: `syncing`,
+        uploaded_bytes: 0,
+    } )
 
     const manifest = await api( `/uploads`, {
         json: {
@@ -157,6 +175,9 @@ async function sync_recording( recording ) {
         },
         method: `POST`,
     } )
+
+    // A previous attempt may have lost only the final server acknowledgment.
+    if( manifest.status === `complete` ) return mark_recording_uploaded( recording )
 
     const chunks = await diary_database.chunks
         .where( `recording_id` )
@@ -208,15 +229,7 @@ async function sync_recording( recording ) {
 
     if( status.status !== `complete` ) throw new Error( `Upload was not finalized` )
 
-    await diary_database.transaction(
-        `rw`,
-        diary_database.chunks,
-        diary_database.recordings,
-        async () => {
-            await diary_database.chunks.where( `recording_id` ).equals( recording.id ).delete()
-            await diary_database.recordings.update( recording.id, { status: `uploaded` } )
-        },
-    )
+    await mark_recording_uploaded( recording )
 }
 
 async function sync_operation( operation ) {

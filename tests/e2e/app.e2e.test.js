@@ -109,12 +109,15 @@ test( `real Chrome captures, syncs, searches, and relaunches offline`, {
     const { promise: chunk_started, resolve: report_chunk_started } = Promise.withResolvers()
     const { promise: completion_released, resolve: release_completion } = Promise.withResolvers()
     const { promise: completion_started, resolve: report_completion_started } = Promise.withResolvers()
+    let chunk_requests = 0
+    let dropped_status_requests = 0
 
     await page.setRequestInterception( true )
-    page.on( `request`, request => {
+    const hold_upload_phases = request => {
         const { pathname } = new URL( request.url() )
 
         if( /\/api\/v1\/uploads\/[^/]+\/chunks\/\d+$/.test( pathname ) ) {
+            chunk_requests += 1
             report_chunk_started()
             void chunk_released.then( () => request.continue() )
             return
@@ -126,8 +129,20 @@ test( `real Chrome captures, syncs, searches, and relaunches offline`, {
             return
         }
 
+        if(
+            request.method() === `GET`
+            && /\/api\/v1\/uploads\/[^/]+$/.test( pathname )
+            && dropped_status_requests === 0
+        ) {
+            dropped_status_requests += 1
+            void request.abort( `failed` )
+            return
+        }
+
         void request.continue()
-    } )
+    }
+
+    page.on( `request`, hold_upload_phases )
 
     await click_text( page, `button`, `Record` )
     await page.waitForFunction( () => document.body.textContent.includes( `Recording` ) )
@@ -172,6 +187,12 @@ test( `real Chrome captures, syncs, searches, and relaunches offline`, {
         throw error
     }
     mark( `recording durable on server` )
+    await page.waitForFunction( () => !document.body.textContent.includes( `Device outbox` ) )
+    assert.equal( dropped_status_requests, 1 )
+    assert.equal( chunk_requests, 1 )
+    mark( `lost final acknowledgment resumed without re-upload` )
+    page.off( `request`, hold_upload_phases )
+    await page.setRequestInterception( false )
     const online_audio_count = await page.$$eval( `audio`, elements => elements.length )
 
     await page.type( `textarea[name=note]`, `Browser journey epsilon remembers the canal.` )
@@ -201,7 +222,11 @@ test( `real Chrome captures, syncs, searches, and relaunches offline`, {
     assert.deepEqual( severe.map( violation => violation.id ), [] )
     mark( `accessibility scan passed` )
 
-    assert.deepEqual( browser_errors, [], `Browser failures: ${ JSON.stringify( {
+    const unexpected_online_errors = browser_errors.filter(
+        error => error !== `Failed to load resource: net::ERR_FAILED`,
+    )
+
+    assert.deepEqual( unexpected_online_errors, [], `Browser failures: ${ JSON.stringify( {
         api_failures,
         browser_errors,
     } ) }` )
@@ -290,6 +315,7 @@ test( `real Chrome captures, syncs, searches, and relaunches offline`, {
     // the network offline. The zero-error assertion above keeps earlier failures strict.
     const unexpected_browser_errors = browser_errors.filter( error =>
         ![
+            `Failed to load resource: net::ERR_FAILED`,
             `Failed to load resource: net::ERR_INTERNET_DISCONNECTED`,
             `Manifest: Line: 1, column: 1, Syntax error.`,
         ].includes( error )

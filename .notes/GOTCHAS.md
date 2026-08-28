@@ -15,6 +15,9 @@
   every persisted chunk and never finalize a recording still locked by another tab.
 - Chunk receipt writes and final assembly share one per-upload lock. Splitting those
   critical sections reintroduces canonical-file corruption under cross-tab replay.
+- Completed upload manifests have no chunk receipts because finalization deletes
+  them. Client resume must handle `status: complete` before treating an empty
+  receipt list as zero uploaded bytes.
 - Authentication delays must finish before acquiring global authentication
   capacity. Sleeping while holding per-identifier or global slots lets a small
   parallel flood starve valid callers.
