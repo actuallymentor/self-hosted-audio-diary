@@ -6,8 +6,8 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        APP_VERSION: ${APP_VERSION:-0.1.0}
-    image: ${DOCKERHUB_APP_IMAGE:-actuallymentor/self-hosted-audio-diary}:${APP_VERSION:-0.1.0}
+        APP_VERSION: ${APP_VERSION:-0.2.0}
+    image: ${DOCKERHUB_APP_IMAGE:-actuallymentor/self-hosted-audio-diary}:${APP_VERSION:-0.2.0}
     restart: unless-stopped
     init: true
     ports:
@@ -47,8 +47,8 @@ services:
       context: transcriber
       dockerfile: Dockerfile
       args:
-        APP_VERSION: ${APP_VERSION:-0.1.0}
-    image: ${DOCKERHUB_TRANSCRIBER_IMAGE:-actuallymentor/self-hosted-audio-diary-transcriber}:${APP_VERSION:-0.1.0}
+        APP_VERSION: ${APP_VERSION:-0.2.0}
+    image: ${DOCKERHUB_TRANSCRIBER_IMAGE:-actuallymentor/self-hosted-audio-diary-transcriber}:${APP_VERSION:-0.2.0}
     restart: unless-stopped
     init: true
     environment:

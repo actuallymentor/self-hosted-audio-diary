@@ -138,6 +138,7 @@ export class DurableRecorder {
                 id: this.id,
                 mime: this.mime,
                 status: `recording`,
+                uploaded_bytes: 0,
             } )
             this.recorder.addEventListener( `dataavailable`, event => {
                 if( !event.data.size ) return
@@ -300,6 +301,7 @@ export async function queue_media_file( account_id, file, item_type ) {
         mime: file.type,
         name: file.name,
         status: `recording`,
+        uploaded_bytes: 0,
     } )
 
     for( let start = 0; start < file.size; start += part_size ) {

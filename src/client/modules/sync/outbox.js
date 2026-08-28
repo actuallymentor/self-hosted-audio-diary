@@ -164,11 +164,20 @@ async function sync_recording( recording ) {
         .sortBy( `sequence` )
     const parts = await coalesce_parts( chunks )
     const received = new Map( manifest.chunks.map( chunk => [ chunk.sequence, chunk ] ) )
-
-    for( const part of parts ) {
+    const part_is_received = part => {
         const receipt = received.get( part.sequence )
 
-        if( receipt?.sha256 === part.sha256 && receipt.byte_size === part.byte_size ) continue
+        return receipt?.sha256 === part.sha256 && receipt.byte_size === part.byte_size
+    }
+    let uploaded_bytes = parts
+        .filter( part_is_received )
+        .reduce( ( total, part ) => total + part.byte_size, 0 )
+
+    // Reconcile local progress with durable server receipts after every resume.
+    await diary_database.recordings.update( recording.id, { uploaded_bytes } )
+
+    for( const part of parts ) {
+        if( part_is_received( part ) ) continue
 
         await api( `/uploads/${ recording.id }/chunks/${ part.sequence }`, {
             body: part.blob,
@@ -179,6 +188,10 @@ async function sync_recording( recording ) {
             },
             method: `PUT`,
         } )
+
+        // A successful receipt means these bytes are durable on the server.
+        uploaded_bytes += part.byte_size
+        await diary_database.recordings.update( recording.id, { uploaded_bytes } )
     }
 
     await api( `/uploads/${ recording.id }/complete`, {

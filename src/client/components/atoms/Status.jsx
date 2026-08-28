@@ -18,7 +18,7 @@ const labels = {
     recording: `Recording`,
     retry: `Saved here · retrying`,
     saved_local: `Saved on this device`,
-    syncing: `Syncing`,
+    syncing: `Uploading`,
     transcribing: `Transcribing`,
     unrecoverable: `Needs attention · kept on device`,
     uploaded: `Safe on server`,

@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.0] - 2026-08-28
+
+### Added
+
+- Show durable upload progress and server finalization in the device outbox.
+
 ## [0.1.0] - 2026-08-26
 
 ### Added

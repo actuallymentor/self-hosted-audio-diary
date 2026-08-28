@@ -32,3 +32,6 @@
   manifests and registry-pulled services. An additional anonymous pull of the
   exact README Compose passed pinned-model readiness, a real Chrome PWA journey,
   and service restart checks.
+- 2026-08-28 — Upload feedback uses server-confirmed durable bytes. Short transfers
+  stay visibly indeterminate; longer transfers advance by confirmed chunks and show
+  a distinct finalization state before the server-safe acknowledgment.

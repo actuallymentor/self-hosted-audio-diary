@@ -38,6 +38,31 @@ const Pending = styled.section`
   padding: 1rem;
 `
 
+const Uploading = styled.section`
+  background: #edf8fa;
+  border: 1px solid #bddde4;
+  border-radius: 1rem;
+  display: grid;
+  gap: .65rem;
+  margin: 1rem 0;
+  padding: 1rem;
+
+  small { color: var(--muted); }
+`
+
+const UploadHeading = styled.div`
+  align-items: baseline;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+`
+
+const UploadBar = styled.progress`
+  accent-color: var(--accent);
+  height: .8rem;
+  width: 100%;
+`
+
 const TagForm = styled.form`
   align-items: end;
   display: grid;
@@ -47,6 +72,38 @@ const TagForm = styled.form`
 
   label { display: grid; gap: .35rem; }
 `
+
+function upload_name( recording ) {
+    if( recording.item_type === `image` ) return `photo`
+    if( recording.item_type === `video` ) return `video`
+
+    return `recording`
+}
+
+function UploadProgress( { recording } ) {
+    const total_bytes = recording.byte_size ?? 0
+    const uploaded_bytes = Math.min( recording.uploaded_bytes ?? 0, total_bytes )
+    const finalizing = total_bytes > 0 && uploaded_bytes === total_bytes
+    const percentage = total_bytes ? Math.round( uploaded_bytes / total_bytes * 100 ) : 0
+    const name = upload_name( recording )
+
+    return <Uploading aria-live="polite">
+        <UploadHeading>
+            <strong>{ finalizing ? `Finishing safely…` : `Uploading ${ name }…` }</strong>
+            { uploaded_bytes > 0 && <span>{ percentage }%</span> }
+        </UploadHeading>
+        <UploadBar
+            aria-label={ `${ name } upload progress` }
+            max={ total_bytes || 1 }
+            value={ uploaded_bytes || undefined }
+        />
+        <small>
+            { finalizing
+                ? `All bytes received. Waiting for server confirmation.`
+                : `Saved on this device while the upload completes.` }
+        </small>
+    </Uploading>
+}
 
 /**
  * Render the one-hand capture surface and today's canonical timeline.
@@ -63,6 +120,8 @@ export function TodayPage() {
         [ user.id ],
         [],
     ).filter( recording => recording.status !== `uploaded` )
+    const uploading = pending.filter( recording => recording.status === `syncing` )
+    const outbox = pending.filter( recording => recording.status !== `syncing` )
 
     const refresh = useCallback( async () => {
         try {
@@ -117,9 +176,10 @@ export function TodayPage() {
 
     return <>
         <RecorderCard account_id={ user.id } on_saved={ refresh } />
-        { pending.length > 0 && <Pending aria-live="polite">
+        { uploading.map( recording => <UploadProgress key={ recording.id } recording={ recording } /> ) }
+        { outbox.length > 0 && <Pending aria-live="polite">
             <strong>Device outbox</strong>
-            { pending.map( recording => <p key={ recording.id }>
+            { outbox.map( recording => <p key={ recording.id }>
                 <Status value={ recording.status } />
                 { recording.status === `unrecoverable` && <> — { recording.last_error }</> }
             </p> ) }

@@ -104,6 +104,31 @@ test( `real Chrome captures, syncs, searches, and relaunches offline`, {
     assert.equal( await page.evaluate( () => Boolean( navigator.serviceWorker.controller ) ), true )
     mark( `service worker controls page` )
 
+    // Hold real upload requests so the user-visible transfer phases are observable.
+    const { promise: chunk_released, resolve: release_chunk } = Promise.withResolvers()
+    const { promise: chunk_started, resolve: report_chunk_started } = Promise.withResolvers()
+    const { promise: completion_released, resolve: release_completion } = Promise.withResolvers()
+    const { promise: completion_started, resolve: report_completion_started } = Promise.withResolvers()
+
+    await page.setRequestInterception( true )
+    page.on( `request`, request => {
+        const { pathname } = new URL( request.url() )
+
+        if( /\/api\/v1\/uploads\/[^/]+\/chunks\/\d+$/.test( pathname ) ) {
+            report_chunk_started()
+            void chunk_released.then( () => request.continue() )
+            return
+        }
+
+        if( /\/api\/v1\/uploads\/[^/]+\/complete$/.test( pathname ) ) {
+            report_completion_started()
+            void completion_released.then( () => request.continue() )
+            return
+        }
+
+        void request.continue()
+    } )
+
     await click_text( page, `button`, `Record` )
     await page.waitForFunction( () => document.body.textContent.includes( `Recording` ) )
     mark( `native recording started` )
@@ -111,6 +136,19 @@ test( `real Chrome captures, syncs, searches, and relaunches offline`, {
     await click_text( page, `button`, `Stop` )
     await page.waitForFunction( () => document.body.textContent.includes( `Saved on this device` ) )
     mark( `recording durable locally` )
+    await chunk_started
+    await page.waitForFunction( () => document.body.textContent.includes( `Uploading recording` ) )
+    assert.equal( await page.$eval( `progress[aria-label="recording upload progress"]`, element => element.hasAttribute( `value` ) ), false )
+    mark( `upload progress visible` )
+    release_chunk()
+    await completion_started
+    await page.waitForFunction( () => document.body.textContent.includes( `Finishing safely` ) )
+    assert.equal( await page.$eval(
+        `progress[aria-label="recording upload progress"]`,
+        element => element.value === element.max,
+    ), true )
+    mark( `server finalization visible` )
+    release_completion()
     try {
         await page.waitForSelector( `audio`, { timeout: 30_000 } )
     } catch ( error ) {
