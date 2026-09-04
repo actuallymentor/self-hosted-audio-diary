@@ -51,3 +51,5 @@
 - 2026-09-04 — Per-item sync invalidation and ordered day fetches closed the final
   transient recording-disappearance window. Calendar now distinguishes a confirmed
   empty day from unavailable server data in the browser gate.
+- 2026-09-04 — Empty-day copy was separated from explicit fetch failure so a normal
+  post-sync refetch never flashes a false server outage.

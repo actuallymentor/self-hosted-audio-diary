@@ -92,11 +92,12 @@ export function Timeline( {
     local_recordings = [],
     on_changed = () => {},
     remote_loaded = false,
+    remote_unavailable = false,
 } ) {
     const timeline_items = merge_items( items, local_recordings, remote_loaded )
-    const empty_message = remote_loaded
-        ? `No entries yet. Your day can start with one thought.`
-        : `This day could not be loaded. Try again when the server is available.`
+    const empty_message = remote_unavailable
+        ? `This day could not be loaded. Try again when the server is available.`
+        : `No entries yet. Your day can start with one thought.`
 
     if( !timeline_items.length ) return <p>{ empty_message }</p>
 

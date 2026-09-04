@@ -18,6 +18,8 @@
   transcription polls stay quiet and mark the remote snapshot stale on failure.
 - Dispatch synchronization after each completed outbox item, not after the batch;
   sequence day requests so an older response cannot undo invalidation.
+- Remote freshness and request failure are separate UI states. Invalidation may
+  make absence unknown, but only a failed current request shows unavailable copy.
 - Interrupted-capture browser gates must wait for IndexedDB status recovery. DOM
   text can briefly omit the still-persisted `recording` row during page startup.
 - Published-image readiness loops must finish inside the job timeout so diagnostics

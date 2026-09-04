@@ -225,12 +225,22 @@ test( `real Chrome captures, syncs, searches, and relaunches offline`, {
     const failed_date = `2000-01-03`
     const { promise: calendar_request_started, resolve: report_calendar_request } = Promise.withResolvers()
     const { promise: calendar_request_released, resolve: release_calendar_request } = Promise.withResolvers()
+    const { promise: calendar_refresh_started, resolve: report_calendar_refresh } = Promise.withResolvers()
+    const { promise: calendar_refresh_released, resolve: release_calendar_refresh } = Promise.withResolvers()
+    let empty_requests = 0
     const hold_calendar_request = request => {
         const { pathname } = new URL( request.url() )
 
         if( request.method() === `GET` && pathname.endsWith( `/days/${ empty_date }` ) ) {
-            report_calendar_request()
-            void calendar_request_released.then( () => request.continue() )
+            empty_requests += 1
+
+            if( empty_requests === 1 ) {
+                report_calendar_request()
+                void calendar_request_released.then( () => request.continue() )
+            } else {
+                report_calendar_refresh()
+                void calendar_refresh_released.then( () => request.continue() )
+            }
             return
         }
 
@@ -249,6 +259,10 @@ test( `real Chrome captures, syncs, searches, and relaunches offline`, {
     await page.waitForFunction( () => document.body.textContent.includes( `Loading your day…` ) )
     release_calendar_request()
     await page.waitForFunction( () => document.body.textContent.includes( `No entries yet` ) )
+    await page.evaluate( () => window.dispatchEvent( new CustomEvent( `shad:synchronized` ) ) )
+    await calendar_refresh_started
+    assert.equal( await page.$eval( `body`, element => element.innerText.includes( `This day could not be loaded` ) ), false )
+    release_calendar_refresh()
     await choose_date( page, failed_date )
     await page.waitForFunction( () => document.body.textContent.includes( `This day could not be loaded` ) )
     page.off( `request`, hold_calendar_request )

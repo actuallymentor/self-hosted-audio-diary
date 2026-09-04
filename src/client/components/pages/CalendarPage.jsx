@@ -31,11 +31,13 @@ export default function CalendarPage() {
         day: null,
         loaded: false,
         settled: false,
+        unavailable: false,
     } )
     const selected = remote.date === date ? remote : {
         day: null,
         loaded: false,
         settled: false,
+        unavailable: false,
     }
     const { day } = selected
 
@@ -53,7 +55,7 @@ export default function CalendarPage() {
 
         if( invalidate ) {
             set_remote( current => current.date === date
-                ? { ...current, loaded: false }
+                ? { ...current, loaded: false, unavailable: false }
                 : current
             )
         }
@@ -62,7 +64,13 @@ export default function CalendarPage() {
             const next = await api( `/days/${ date }` )
 
             if( active_date.current === date && refresh_generation.current === generation ) {
-                set_remote( { date, day: next, loaded: true, settled: true } )
+                set_remote( {
+                    date,
+                    day: next,
+                    loaded: true,
+                    settled: true,
+                    unavailable: false,
+                } )
             }
         } catch ( error ) {
             if( active_date.current !== date || refresh_generation.current !== generation ) return
@@ -72,6 +80,7 @@ export default function CalendarPage() {
                 day: current.date === date ? current.day : null,
                 loaded: false,
                 settled: true,
+                unavailable: true,
             } ) )
             if( !quiet && navigator.onLine ) toast.error( error.message )
         }
@@ -113,6 +122,7 @@ export default function CalendarPage() {
             local_recordings={ local_recordings }
             on_changed={ refresh }
             remote_loaded={ selected.loaded }
+            remote_unavailable={ selected.unavailable }
         /> }
     </main>
 }

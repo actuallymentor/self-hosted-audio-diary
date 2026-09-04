@@ -116,6 +116,7 @@ export function TodayPage() {
     const [ day, set_day ] = useState( { items: [], tags: [] } )
     const [ loading, set_loading ] = useState( true )
     const [ remote_loaded, set_remote_loaded ] = useState( false )
+    const [ remote_unavailable, set_remote_unavailable ] = useState( false )
     const refresh_generation = useRef( 0 )
     const local_recordings = useLiveQuery(
         () => list_local_recordings( user.id ),
@@ -133,7 +134,10 @@ export function TodayPage() {
         const generation = refresh_generation.current + 1
 
         refresh_generation.current = generation
-        if( invalidate ) set_remote_loaded( false )
+        if( invalidate ) {
+            set_remote_loaded( false )
+            set_remote_unavailable( false )
+        }
 
         try {
             const next = await api( `/days/${ local_date }` )
@@ -142,10 +146,12 @@ export function TodayPage() {
 
             set_day( next )
             set_remote_loaded( true )
+            set_remote_unavailable( false )
         } catch ( error ) {
             if( refresh_generation.current !== generation ) return
 
             set_remote_loaded( false )
+            set_remote_unavailable( true )
             if( !quiet && navigator.onLine ) toast.error( error.message )
         } finally {
             if( refresh_generation.current === generation ) set_loading( false )
@@ -240,6 +246,7 @@ export function TodayPage() {
             local_recordings={ day_recordings }
             on_changed={ refresh }
             remote_loaded={ remote_loaded }
+            remote_unavailable={ remote_unavailable }
         /> }
     </>
 }
