@@ -115,6 +115,7 @@ export function TodayPage() {
     const { local_date } = current_capture()
     const [ day, set_day ] = useState( { items: [], tags: [] } )
     const [ loading, set_loading ] = useState( true )
+    const [ remote_loaded, set_remote_loaded ] = useState( false )
     const local_recordings = useLiveQuery(
         () => list_local_recordings( user.id ),
         [ user.id ],
@@ -131,6 +132,7 @@ export function TodayPage() {
         try {
             const next = await api( `/days/${ local_date }` )
             set_day( next )
+            set_remote_loaded( true )
         } catch ( error ) {
             if( navigator.onLine ) toast.error( error.message )
         } finally {
@@ -217,6 +219,11 @@ export function TodayPage() {
             </label>
             <Button type="submit">Save tags</Button>
         </TagForm>
-        { loading ? <p>Loading your day…</p> : <Timeline items={ day.items } local_recordings={ day_recordings } on_changed={ refresh } /> }
+        { loading ? <p>Loading your day…</p> : <Timeline
+            items={ day.items }
+            local_recordings={ day_recordings }
+            on_changed={ refresh }
+            remote_loaded={ remote_loaded }
+        /> }
     </>
 }

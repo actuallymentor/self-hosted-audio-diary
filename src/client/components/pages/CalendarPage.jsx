@@ -34,6 +34,7 @@ export default function CalendarPage() {
     }, [ date ] )
 
     useEffect( () => {
+        set_day( null )
         void refresh()
     }, [ refresh ] )
 
@@ -61,6 +62,7 @@ export default function CalendarPage() {
             items={ day?.items ?? [] }
             local_recordings={ local_recordings }
             on_changed={ refresh }
+            remote_loaded={ day !== null }
         />
     </main>
 }

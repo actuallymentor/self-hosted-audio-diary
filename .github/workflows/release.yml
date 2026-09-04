@@ -203,7 +203,7 @@ jobs:
             --volume shad-published-diary:/data/diary \
             "$APP_IMAGE:$VERSION"
 
-          for attempt in $(seq 1 360); do
+          for attempt in $(seq 1 120); do
             if curl --fail --silent http://127.0.0.1:3000/health/ready | jq -e '.status == "ok"' >/dev/null && \
               curl --fail --silent http://127.0.0.1:8000/readyz | jq -e '.status == "ready"' >/dev/null; then
               break
@@ -224,7 +224,7 @@ jobs:
             http://127.0.0.1:8000/v1/audio/transcriptions >/dev/null
 
       - name: Published service diagnostics
-        if: failure()
+        if: failure() || cancelled()
         run: |
           docker logs shad-published-app 2>&1 || true
           docker logs shad-published-transcriber 2>&1 || true

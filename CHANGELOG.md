@@ -20,6 +20,9 @@
 - Preserve model-cache ownership in verification and release checks.
 - Keep capture and search available while the transcription model starts.
 - Log inference failures with their server-side exception details.
+- Keep uploaded recordings visible with explicit unknown server state while offline.
+- Classify request abort and body timeouts as bounded transcription failures.
+- Preserve release diagnostics when published-image readiness fails or is cancelled.
 
 ## [0.2.0] - 2026-08-28
 

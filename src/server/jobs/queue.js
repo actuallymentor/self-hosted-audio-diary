@@ -1,11 +1,18 @@
 import { randomUUID } from "node:crypto"
 
+function is_transcriber_timeout( error ) {
+    const code = String( error.cause?.code ?? error.code ?? `` ).toUpperCase()
+
+    return error.name === `TimeoutError`
+        || [ `UND_ERR_BODY_TIMEOUT`, `UND_ERR_HEADERS_TIMEOUT` ].includes( code )
+}
+
 function safe_error_code( job, error ) {
     const transcriber_status = String( error.message ?? `` ).match( /^Transcriber returned (\d{3})$/ )
     const cause_code = String( error.cause?.code ?? `` ).toUpperCase()
 
     if( transcriber_status ) return `transcriber_http_${ transcriber_status[1] }`
-    if( cause_code === `UND_ERR_HEADERS_TIMEOUT` ) return `transcriber_timeout`
+    if( is_transcriber_timeout( error ) ) return `transcriber_timeout`
     if( job.type === `transcription` && cause_code ) return `transcriber_unavailable`
     if( typeof error.code === `string` && /^[a-z0-9_]{1,80}$/i.test( error.code ) ) {
         return error.code.toLowerCase()
@@ -22,7 +29,7 @@ function retry_without_limit( job, error ) {
     const status = Number( transcriber_status?.[1] )
 
     if( [ 408, 425, 429 ].includes( status ) || status >= 500 ) return true
-    if( cause_code === `UND_ERR_HEADERS_TIMEOUT` ) return false
+    if( is_transcriber_timeout( error ) ) return false
 
     return error.message === `fetch failed` || Boolean( cause_code )
 }

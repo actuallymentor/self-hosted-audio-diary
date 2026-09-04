@@ -30,7 +30,7 @@ const RecordingStates = styled.div`
   margin-top: .65rem;
 `
 
-function merge_items( items, local_recordings ) {
+function merge_items( items, local_recordings, remote_loaded ) {
     const local_audio = local_recordings.filter( recording =>
         ( recording.item_type ?? `audio` ) === `audio`
     )
@@ -42,12 +42,14 @@ function merge_items( items, local_recordings ) {
         remote_present: true,
     } ) )
     const local_only = local_audio
-        .filter( recording => recording.status !== `uploaded` && !remote_ids.has( recording.id ) )
+        .filter( recording =>
+            ( recording.status !== `uploaded` || !remote_loaded ) && !remote_ids.has( recording.id )
+        )
         .map( recording => ( {
             capture: recording.capture,
             id: recording.id,
             local_recording: recording,
-            remote_present: false,
+            remote_present: remote_loaded ? false : null,
             type: `audio`,
         } ) )
 
@@ -57,11 +59,18 @@ function merge_items( items, local_recordings ) {
 }
 
 function transcription_state( item ) {
+    if( item.remote_present === null ) return `transcription_unknown`
     if( !item.remote_present ) return `transcription_waiting`
 
     const state = item.recording_status?.transcription ?? ( item.transcript ? `complete` : `not_queued` )
 
     return state === `failed` ? `transcription_failed` : state
+}
+
+function remote_state( item ) {
+    if( item.remote_present === null ) return `remote_unknown`
+
+    return item.remote_present ? `remote_present` : `remote_absent`
 }
 
 /**
@@ -70,8 +79,13 @@ function transcription_state( item ) {
  * @param {object} props
  * @returns {React.ReactElement}
  */
-export function Timeline( { items = [], local_recordings = [], on_changed = () => {} } ) {
-    const timeline_items = merge_items( items, local_recordings )
+export function Timeline( {
+    items = [],
+    local_recordings = [],
+    on_changed = () => {},
+    remote_loaded = false,
+} ) {
+    const timeline_items = merge_items( items, local_recordings, remote_loaded )
 
     if( !timeline_items.length ) return <p>No entries yet. Your day can start with one thought.</p>
 
@@ -131,9 +145,9 @@ export function Timeline( { items = [], local_recordings = [], on_changed = () =
             </time>
             { item.type === `audio` && <RecordingStates aria-label="Recording state">
                 <Status value={ item.local_recording?.local_present ? `local_present` : `local_absent` } />
-                <Status value={ item.remote_present ? `remote_present` : `remote_absent` } />
+                <Status value={ remote_state( item ) } />
                 <Status value={ transcription_state( item ) } />
-                { !item.remote_present && <Status value={ item.local_recording.status } /> }
+                { item.remote_present !== true && <Status value={ item.local_recording.status } /> }
             </RecordingStates> }
             { item.type === `text` && <p>{ item.text }</p> }
             { item.type === `audio` && item.remote_present && <audio controls preload="metadata" src={ `/api/v1/media/${ item.id }` } /> }

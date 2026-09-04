@@ -44,7 +44,7 @@ run_as_workspace_owner() {
         return
     fi
 
-    sudo -u "#$APP_UID" -g "#$APP_GID" "$@"
+    sudo --preserve-env=HOME,PATH -u "#$APP_UID" -g "#$APP_GID" "$@"
 }
 
 wait_for_app() {

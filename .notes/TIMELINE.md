@@ -42,3 +42,6 @@
 - 2026-09-04 — Post-commit independent review prevented archive-wide reprocessing
   after database recovery and kept the app available during model startup. It also
   removed deleted recording ghosts and hardened timeout and release diagnostics.
+- 2026-09-04 — Follow-up review preserved uploaded rows during offline day fetches,
+  aligned timeout labels with real abort/body errors, and bounded release readiness
+  inside its job budget. Unit, browser, and full-stack verification resumed.

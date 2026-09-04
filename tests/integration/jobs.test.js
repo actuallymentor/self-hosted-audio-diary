@@ -75,11 +75,17 @@ test( `makes repeated transcription timeouts terminal`, async t => {
         user_id: user.id,
     } )
 
-    for( let attempt = 0; attempt < 8; attempt += 1 ) {
+    const timeouts = [
+        ...Array.from( { length: 4 }, () => Object.assign( new Error( `Timed out` ), {
+            name: `TimeoutError`,
+        } ) ),
+        ...Array.from( { length: 4 }, () => new TypeError( `fetch failed`, {
+            cause: { code: `UND_ERR_BODY_TIMEOUT` },
+        } ) ),
+    ]
+
+    for( const error of timeouts ) {
         const job = server.runtime.jobs.lease( server.runtime, `test-worker` )
-        const error = new TypeError( `fetch failed`, {
-            cause: { code: `UND_ERR_HEADERS_TIMEOUT` },
-        } )
 
         server.runtime.jobs.finish( server.runtime, job, error )
         server.runtime.database.prepare( `UPDATE jobs SET run_after = 0 WHERE id = ?` ).run( id )

@@ -257,17 +257,40 @@ test( `real Chrome captures, syncs, searches, and relaunches offline`, {
         throw error
     }
     mark( `offline shell relaunched` )
+    await page.waitForFunction( () => [ ...document.querySelectorAll( `li` ) ].some( item =>
+        item.textContent.includes( `Server status unavailable` )
+        && item.textContent.includes( `Transcription status unavailable` )
+    ) )
+    mark( `uploaded recording remains visible offline` )
     await click_text( page, `button`, `Record` )
     await new Promise( resolve => setTimeout( resolve, 1_000 ) )
     await click_text( page, `button`, `Stop` )
     await page.waitForFunction( () => document.body.textContent.includes( `Saved on this device` ) )
     mark( `offline recording durable locally` )
 
+    await page.waitForFunction( () => [ ...document.querySelectorAll( `button` ) ].some( button =>
+        button.textContent.trim() === `Record`
+    ) )
     await click_text( page, `button`, `Record` )
     await new Promise( resolve => setTimeout( resolve, 6_000 ) )
     await page.reload( { waitUntil: `domcontentloaded` } )
     await page.waitForFunction( () => document.body.textContent.includes( `What happened?` ) )
-    await page.waitForFunction( () => !document.body.textContent.includes( `Recording` ) )
+    await page.waitForFunction( async () => {
+        const database = await new Promise( ( resolve, reject ) => {
+            const request = indexedDB.open( `shad_local` )
+
+            request.addEventListener( `success`, () => resolve( request.result ) )
+            request.addEventListener( `error`, () => reject( request.error ) )
+        } )
+        const transaction = database.transaction( `recordings`, `readonly` )
+        const request = transaction.objectStore( `recordings` ).getAll()
+        const recordings = await new Promise( ( resolve, reject ) => {
+            request.addEventListener( `success`, () => resolve( request.result ) )
+            request.addEventListener( `error`, () => reject( request.error ) )
+        } )
+
+        return recordings.every( recording => recording.status !== `recording` )
+    } )
     const interrupted_statuses = await page.evaluate( async () => {
         const database = await new Promise( ( resolve, reject ) => {
             const request = indexedDB.open( `shad_local` )
