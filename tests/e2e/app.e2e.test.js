@@ -260,6 +260,7 @@ test( `real Chrome captures, syncs, searches, and relaunches offline`, {
     await page.waitForFunction( () => [ ...document.querySelectorAll( `li` ) ].some( item =>
         item.textContent.includes( `Server status unavailable` )
         && item.textContent.includes( `Transcription status unavailable` )
+        && item.textContent.includes( `Upload confirmed earlier` )
     ) )
     mark( `uploaded recording remains visible offline` )
     await click_text( page, `button`, `Record` )
@@ -288,9 +289,11 @@ test( `real Chrome captures, syncs, searches, and relaunches offline`, {
             request.addEventListener( `success`, () => resolve( request.result ) )
             request.addEventListener( `error`, () => reject( request.error ) )
         } )
+        const recovered = recordings.every( recording => recording.status !== `recording` )
 
-        return recordings.every( recording => recording.status !== `recording` )
-    } )
+        database.close()
+        return recovered
+    }, { polling: 100 } )
     const interrupted_statuses = await page.evaluate( async () => {
         const database = await new Promise( ( resolve, reject ) => {
             const request = indexedDB.open( `shad_local` )

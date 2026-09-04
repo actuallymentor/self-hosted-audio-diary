@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react"
 import { useLiveQuery } from "dexie-react-hooks"
+import toast from "react-hot-toast"
 import { StringParam, useQueryParam, withDefault } from "use-query-params"
 import styled from "styled-components"
 
@@ -23,18 +24,27 @@ const Picker = styled.label`
 export default function CalendarPage() {
     const user = use_session( state => state.user )
     const [ date, set_date ] = useQueryParam( `date`, withDefault( StringParam, current_capture().local_date ) )
-    const [ day, set_day ] = useState( null )
+    const [ days, set_days ] = useState( {} )
+    const [ settled_dates, set_settled_dates ] = useState( {} )
+    const day = days[date] ?? null
     const local_recordings = useLiveQuery(
         () => list_local_recordings( user.id ),
         [ user.id ],
         [],
     ).filter( recording => recording.capture.local_date === date )
     const refresh = useCallback( async () => {
-        set_day( await api( `/days/${ date }` ) )
+        try {
+            const next = await api( `/days/${ date }` )
+
+            set_days( current => ( { ...current, [date]: next } ) )
+        } catch ( error ) {
+            if( navigator.onLine ) toast.error( error.message )
+        } finally {
+            set_settled_dates( current => ( { ...current, [date]: true } ) )
+        }
     }, [ date ] )
 
     useEffect( () => {
-        set_day( null )
         void refresh()
     }, [ refresh ] )
 
@@ -58,11 +68,11 @@ export default function CalendarPage() {
             <strong>Diary date</strong>
             <input onChange={ event => set_date( event.target.value ) } type="date" value={ date } />
         </Picker>
-        <Timeline
+        { !day && !settled_dates[date] ? <p>Loading your day…</p> : <Timeline
             items={ day?.items ?? [] }
             local_recordings={ local_recordings }
             on_changed={ refresh }
             remote_loaded={ day !== null }
-        />
+        /> }
     </main>
 }

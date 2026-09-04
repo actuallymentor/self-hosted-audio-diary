@@ -31,6 +31,7 @@ const labels = {
     transcribing: `Transcribing`,
     unrecoverable: `Needs attention · kept on device`,
     uploaded: `Safe on server`,
+    uploaded_previous: `Upload confirmed earlier`,
 }
 
 /**

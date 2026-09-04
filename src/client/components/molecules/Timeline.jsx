@@ -73,6 +73,14 @@ function remote_state( item ) {
     return item.remote_present ? `remote_present` : `remote_absent`
 }
 
+function local_sync_state( item ) {
+    if( item.remote_present === null && item.local_recording.status === `uploaded` ) {
+        return `uploaded_previous`
+    }
+
+    return item.local_recording.status
+}
+
 /**
  * Render one chronological day using stable media IDs instead of archive paths.
  *
@@ -147,7 +155,7 @@ export function Timeline( {
                 <Status value={ item.local_recording?.local_present ? `local_present` : `local_absent` } />
                 <Status value={ remote_state( item ) } />
                 <Status value={ transcription_state( item ) } />
-                { item.remote_present !== true && <Status value={ item.local_recording.status } /> }
+                { item.remote_present !== true && <Status value={ local_sync_state( item ) } /> }
             </RecordingStates> }
             { item.type === `text` && <p>{ item.text }</p> }
             { item.type === `audio` && item.remote_present && <audio controls preload="metadata" src={ `/api/v1/media/${ item.id }` } /> }

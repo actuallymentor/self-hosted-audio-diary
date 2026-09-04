@@ -12,7 +12,8 @@
 - App availability must depend only on the transcriber process starting. Model
   readiness may lag or fail without blocking capture, playback, search, or upload.
 - Uploaded local rows are hidden only after a successful day fetch proves they are
-  absent remotely. While offline, keep them visible and mark remote state unknown.
+  absent remotely. While offline, keep them visible, mark remote state unknown,
+  and describe the upload acknowledgment as historical.
 - Interrupted-capture browser gates must wait for IndexedDB status recovery. DOM
   text can briefly omit the still-persisted `recording` row during page startup.
 - Published-image readiness loops must finish inside the job timeout so diagnostics
