@@ -14,6 +14,8 @@
 - Uploaded local rows are hidden only after a successful day fetch proves they are
   absent remotely. While offline, keep them visible, mark remote state unknown,
   and describe the upload acknowledgment as historical.
+- A synchronization event invalidates day absence before refetching. Background
+  transcription polls stay quiet and mark the remote snapshot stale on failure.
 - Interrupted-capture browser gates must wait for IndexedDB status recovery. DOM
   text can briefly omit the still-persisted `recording` row during page startup.
 - Published-image readiness loops must finish inside the job timeout so diagnostics

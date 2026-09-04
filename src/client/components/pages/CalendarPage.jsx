@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react"
+import React, { useCallback, useEffect, useRef, useState } from "react"
 import { useLiveQuery } from "dexie-react-hooks"
 import toast from "react-hot-toast"
 import { StringParam, useQueryParam, withDefault } from "use-query-params"
@@ -24,28 +24,63 @@ const Picker = styled.label`
 export default function CalendarPage() {
     const user = use_session( state => state.user )
     const [ date, set_date ] = useQueryParam( `date`, withDefault( StringParam, current_capture().local_date ) )
-    const [ days, set_days ] = useState( {} )
-    const [ settled_dates, set_settled_dates ] = useState( {} )
-    const day = days[date] ?? null
+    const active_date = useRef( date )
+    const [ remote, set_remote ] = useState( {
+        date: null,
+        day: null,
+        loaded: false,
+        settled: false,
+    } )
+    const selected = remote.date === date ? remote : {
+        day: null,
+        loaded: false,
+        settled: false,
+    }
+    const { day } = selected
+
+    active_date.current = date
+
     const local_recordings = useLiveQuery(
         () => list_local_recordings( user.id ),
         [ user.id ],
         [],
     ).filter( recording => recording.capture.local_date === date )
-    const refresh = useCallback( async () => {
+    const refresh = useCallback( async ( { invalidate = false, quiet = false } = {} ) => {
+        if( invalidate ) {
+            set_remote( current => current.date === date
+                ? { ...current, loaded: false }
+                : current
+            )
+        }
+
         try {
             const next = await api( `/days/${ date }` )
 
-            set_days( current => ( { ...current, [date]: next } ) )
+            if( active_date.current === date ) {
+                set_remote( { date, day: next, loaded: true, settled: true } )
+            }
         } catch ( error ) {
-            if( navigator.onLine ) toast.error( error.message )
-        } finally {
-            set_settled_dates( current => ( { ...current, [date]: true } ) )
+            if( active_date.current !== date ) return
+
+            set_remote( current => ( {
+                date,
+                day: current.date === date ? current.day : null,
+                loaded: false,
+                settled: true,
+            } ) )
+            if( !quiet && navigator.onLine ) toast.error( error.message )
         }
     }, [ date ] )
 
     useEffect( () => {
         void refresh()
+    }, [ refresh ] )
+
+    useEffect( () => {
+        const synchronized = () => void refresh( { invalidate: true, quiet: true } )
+
+        window.addEventListener( `shad:synchronized`, synchronized )
+        return () => window.removeEventListener( `shad:synchronized`, synchronized )
     }, [ refresh ] )
 
     useEffect( () => {
@@ -56,7 +91,7 @@ export default function CalendarPage() {
         if( !waiting ) return undefined
 
         const timer = setInterval( () => {
-            void refresh()
+            void refresh( { quiet: true } )
         }, 5_000 )
 
         return () => clearInterval( timer )
@@ -68,11 +103,11 @@ export default function CalendarPage() {
             <strong>Diary date</strong>
             <input onChange={ event => set_date( event.target.value ) } type="date" value={ date } />
         </Picker>
-        { !day && !settled_dates[date] ? <p>Loading your day…</p> : <Timeline
+        { !selected.settled ? <p>Loading your day…</p> : <Timeline
             items={ day?.items ?? [] }
             local_recordings={ local_recordings }
             on_changed={ refresh }
-            remote_loaded={ day !== null }
+            remote_loaded={ selected.loaded }
         /> }
     </main>
 }

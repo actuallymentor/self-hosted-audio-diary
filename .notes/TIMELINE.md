@@ -45,3 +45,6 @@
 - 2026-09-04 — Follow-up review preserved uploaded rows during offline day fetches,
   aligned timeout labels with real abort/body errors, and bounded release readiness
   inside its job budget. Unit, browser, and full-stack verification resumed.
+- 2026-09-04 — Final UX review invalidated stale day snapshots on synchronization,
+  silenced background polling failures, and added real Calendar navigation/loading
+  coverage before release.

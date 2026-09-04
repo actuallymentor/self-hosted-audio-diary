@@ -128,13 +128,16 @@ export function TodayPage() {
         recording.capture.local_date === local_date
     )
 
-    const refresh = useCallback( async () => {
+    const refresh = useCallback( async ( { invalidate = false, quiet = false } = {} ) => {
+        if( invalidate ) set_remote_loaded( false )
+
         try {
             const next = await api( `/days/${ local_date }` )
             set_day( next )
             set_remote_loaded( true )
         } catch ( error ) {
-            if( navigator.onLine ) toast.error( error.message )
+            set_remote_loaded( false )
+            if( !quiet && navigator.onLine ) toast.error( error.message )
         } finally {
             set_loading( false )
         }
@@ -142,11 +145,12 @@ export function TodayPage() {
 
     useEffect( () => {
         void refresh()
-        void sync_outbox( user.id ).then( refresh )
+        void sync_outbox( user.id )
 
-        window.addEventListener( `shad:synchronized`, refresh )
+        const synchronized = () => void refresh( { invalidate: true, quiet: true } )
 
-        return () => window.removeEventListener( `shad:synchronized`, refresh )
+        window.addEventListener( `shad:synchronized`, synchronized )
+        return () => window.removeEventListener( `shad:synchronized`, synchronized )
     }, [ refresh, user.id ] )
 
     useEffect( () => {
@@ -156,7 +160,7 @@ export function TodayPage() {
 
         if( !waiting ) return undefined
 
-        const timer = setInterval( () => void refresh(), 5_000 )
+        const timer = setInterval( () => void refresh( { quiet: true } ), 5_000 )
 
         return () => clearInterval( timer )
     }, [ day.items, refresh ] )
@@ -193,7 +197,10 @@ export function TodayPage() {
     }
 
     return <>
-        <RecorderCard account_id={ user.id } on_saved={ refresh } />
+        <RecorderCard
+            account_id={ user.id }
+            on_saved={ () => refresh( { invalidate: true, quiet: true } ) }
+        />
         { uploading.map( recording => <UploadProgress key={ recording.id } recording={ recording } /> ) }
         { outbox.length > 0 && <Pending aria-live="polite">
             <strong>Device outbox</strong>

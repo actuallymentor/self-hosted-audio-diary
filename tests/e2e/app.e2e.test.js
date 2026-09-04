@@ -206,6 +206,45 @@ test( `real Chrome captures, syncs, searches, and relaunches offline`, {
     await page.setRequestInterception( false )
     const online_audio_count = await page.$$eval( `audio`, elements => elements.length )
 
+    await click_text( page, `a`, `Calendar` )
+    await page.waitForFunction( expected => document.querySelectorAll( `audio` ).length >= expected, {}, online_audio_count )
+    assert.equal( await page.$eval( `body`, element => element.innerText.includes( `status unavailable` ) ), false )
+    mark( `calendar recording state loaded` )
+
+    const empty_date = `2000-01-02`
+    const { promise: calendar_request_started, resolve: report_calendar_request } = Promise.withResolvers()
+    const { promise: calendar_request_released, resolve: release_calendar_request } = Promise.withResolvers()
+    const hold_calendar_request = request => {
+        const { pathname } = new URL( request.url() )
+
+        if( request.method() === `GET` && pathname.endsWith( `/days/${ empty_date }` ) ) {
+            report_calendar_request()
+            void calendar_request_released.then( () => request.continue() )
+            return
+        }
+
+        void request.continue()
+    }
+
+    await page.setRequestInterception( true )
+    page.on( `request`, hold_calendar_request )
+    await page.$eval( `input[type=date]`, ( element, next_date ) => {
+        const value = Object.getOwnPropertyDescriptor( HTMLInputElement.prototype, `value` ).set
+
+        value.call( element, next_date )
+        element.dispatchEvent( new Event( `input`, { bubbles: true } ) )
+        element.dispatchEvent( new Event( `change`, { bubbles: true } ) )
+    }, empty_date )
+    await calendar_request_started
+    await page.waitForFunction( () => document.body.textContent.includes( `Loading your day…` ) )
+    release_calendar_request()
+    await page.waitForFunction( () => document.body.textContent.includes( `No entries yet` ) )
+    page.off( `request`, hold_calendar_request )
+    await page.setRequestInterception( false )
+    mark( `calendar date change waits for fresh state` )
+
+    await click_text( page, `a`, `Today` )
+    await page.waitForSelector( `textarea[name=note]` )
     await page.type( `textarea[name=note]`, `Browser journey epsilon remembers the canal.` )
     await click_text( page, `button`, `Save note` )
     await page.waitForFunction( () => document.body.textContent.includes( `Browser journey epsilon` ) )
