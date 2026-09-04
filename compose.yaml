@@ -6,8 +6,8 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        APP_VERSION: ${APP_VERSION:-0.2.0}
-    image: ${DOCKERHUB_APP_IMAGE:-actuallymentor/self-hosted-audio-diary}:${APP_VERSION:-0.2.0}
+        APP_VERSION: ${APP_VERSION:-0.3.0}
+    image: ${DOCKERHUB_APP_IMAGE:-actuallymentor/self-hosted-audio-diary}:${APP_VERSION:-0.3.0}
     restart: unless-stopped
     init: true
     ports:
@@ -40,15 +40,15 @@ services:
       retries: 6
     depends_on:
       transcriber:
-        condition: service_started
+        condition: service_healthy
 
   transcriber:
     build:
       context: transcriber
       dockerfile: Dockerfile
       args:
-        APP_VERSION: ${APP_VERSION:-0.2.0}
-    image: ${DOCKERHUB_TRANSCRIBER_IMAGE:-actuallymentor/self-hosted-audio-diary-transcriber}:${APP_VERSION:-0.2.0}
+        APP_VERSION: ${APP_VERSION:-0.3.0}
+    image: ${DOCKERHUB_TRANSCRIBER_IMAGE:-actuallymentor/self-hosted-audio-diary-transcriber}:${APP_VERSION:-0.3.0}
     restart: unless-stopped
     init: true
     environment:
@@ -63,8 +63,8 @@ services:
     volumes:
       - ${TRANSCRIPTION_MODEL_CACHE_PATH:-./data/models}:/var/lib/transcriber/huggingface
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz')"]
       interval: 10s
       timeout: 5s
       retries: 12
-      start_period: 30s
+      start_period: 1h

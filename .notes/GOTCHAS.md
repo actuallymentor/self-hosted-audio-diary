@@ -1,5 +1,12 @@
 # Project gotchas
 
+- Repository access is SSH-only. Keep `origin` on the GitHub SSH URL; the ignored
+  repo-local `.ssh_key` is always allowed for repository access.
+- Node's bundled `fetch` has a five-minute headers timeout. CPU transcription uses
+  one matching Undici `fetch`/`FormData`/dispatcher set with explicit long timeouts;
+  mixing the global and package implementations silently breaks multipart uploads.
+- When verification runs through `sudo`, test service IDs must come from the
+  workspace owner so the restored model cache stays readable and writable.
 - Babysit mounts `/workspace/node_modules` from a separate volume. Sibling Docker
   containers must build lockfile-coupled dependencies instead of bind-mounting the
   host workspace's `node_modules` path.

@@ -35,3 +35,7 @@
 - 2026-08-28 — Upload feedback uses server-confirmed durable bytes. Short transfers
   stay visibly indeterminate; longer transfers advance by confirmed chunks and show
   a distinct finalization state before the server-safe acknowledgment.
+- 2026-09-04 — Production audit found one audio job exhausted after eight exact
+  five-minute header timeouts while the healthy CPU transcriber was still working.
+  Recovery, durable retry, explicit per-recording location/transcription state, and
+  readiness-aware deployment gates were implemented and passed the full verifier.

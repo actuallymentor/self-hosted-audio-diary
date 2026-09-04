@@ -20,12 +20,47 @@ function time_prefix( utc ) {
  * @returns {Promise<object>}
  */
 export async function get_day( runtime, user, local_date ) {
-    return read_day( {
+    const day = await read_day( {
         diary_root: runtime.config.diary_data_path,
         email: user.email,
         local_date,
         user_id: user.id,
     } )
+    const audio = day.items.filter( item => item.type === `audio` )
+
+    if( !audio.length ) return day
+
+    const placeholders = audio.map( () => `?` ).join( `, ` )
+    const jobs = runtime.database.prepare( `
+        SELECT json_extract(payload_json, '$.item_id') AS item_id,
+          status, attempts, last_error, created_at
+        FROM jobs
+        WHERE user_id = ? AND type = 'transcription'
+          AND json_extract(payload_json, '$.item_id') IN (${ placeholders })
+        ORDER BY created_at
+    ` ).all( user.id, ...audio.map( item => item.id ) )
+    const jobs_by_item = new Map( jobs.map( job => [ job.item_id, job ] ) )
+
+    return {
+        ...day,
+        items: day.items.map( item => {
+            if( item.type !== `audio` ) return item
+
+            const job = jobs_by_item.get( item.id )
+            const transcription = item.transcript
+                ? `complete`
+                : { running: `transcribing` }[job?.status] ?? job?.status ?? `not_queued`
+
+            return {
+                ...item,
+                recording_status: {
+                    remote: `present`,
+                    transcription,
+                    ... job?.last_error ? { transcription_error: job.last_error } : {},
+                },
+            }
+        } ),
+    }
 }
 
 /**
@@ -229,6 +264,43 @@ function owned_item( runtime, user_id, item_id ) {
         FROM items JOIN days ON days.id = items.day_id
         WHERE items.id = ? AND items.user_id = ? AND items.deleted_at IS NULL
     ` ).get( item_id, user_id )
+}
+
+/**
+ * Retry transcription for one server-owned audio item.
+ *
+ * @param {object} runtime
+ * @param {object} user
+ * @param {string} item_id
+ * @returns {object}
+ */
+export function retry_transcription( runtime, user, item_id ) {
+    const item = owned_item( runtime, user.id, item_id )
+
+    if( !item ) {
+        const error = new Error( `Diary item was not found` )
+
+        error.status_code = 404
+        error.code = `item_not_found`
+        throw error
+    }
+
+    if( item.type !== `audio` ) {
+        const error = new Error( `Only audio can be transcribed` )
+
+        error.status_code = 422
+        error.code = `item_not_audio`
+        throw error
+    }
+
+    const job_id = runtime.jobs.retry( runtime, {
+        dedupe_key: `${ item.id }:${ item.sha256 }`,
+        payload: { item_id: item.id },
+        type: `transcription`,
+        user_id: user.id,
+    } )
+
+    return { job_id, status: `queued` }
 }
 
 /**

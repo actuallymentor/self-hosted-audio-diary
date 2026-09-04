@@ -1,6 +1,7 @@
 import asyncio
 from contextlib import asynccontextmanager
 from contextlib import suppress
+import logging
 from pathlib import Path
 import tempfile
 
@@ -12,6 +13,7 @@ from engine import TranscriptionEngine
 
 
 engine = TranscriptionEngine()
+logger = logging.getLogger("uvicorn.error")
 
 
 @asynccontextmanager
@@ -90,6 +92,7 @@ async def transcribe(
     try:
         result = await engine.transcribe(target, language)
     except Exception as error:
+        logger.exception("Audio transcription failed")
         raise HTTPException(status_code=422, detail="Audio could not be transcribed") from error
     finally:
         target.unlink(missing_ok=True)

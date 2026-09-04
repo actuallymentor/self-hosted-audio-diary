@@ -4,7 +4,7 @@ Private voice journaling with offline recording, resumable uploads, local
 multilingual transcription, search, reflections, and ordinary files you can back
 up without SHAD.
 
-Status: `0.2.0` preview. Images support `linux/amd64` and `linux/arm64`. Physical
+Status: `0.3.0` preview. Images support `linux/amd64` and `linux/arm64`. Physical
 iPhone and Android validation remains required before `1.0.0`.
 
 ## Requirements
@@ -26,7 +26,7 @@ name: shad
 
 services:
   app:
-    image: actuallymentor/self-hosted-audio-diary:0.2.0
+    image: actuallymentor/self-hosted-audio-diary:0.3.0
     restart: unless-stopped
     init: true
     ports:
@@ -59,10 +59,10 @@ services:
       retries: 6
     depends_on:
       transcriber:
-        condition: service_started
+        condition: service_healthy
 
   transcriber:
-    image: actuallymentor/self-hosted-audio-diary-transcriber:0.2.0
+    image: actuallymentor/self-hosted-audio-diary-transcriber:0.3.0
     restart: unless-stopped
     init: true
     environment:
@@ -77,11 +77,11 @@ services:
     volumes:
       - ${TRANSCRIPTION_MODEL_CACHE_PATH:-./data/models}:/var/lib/transcriber/huggingface
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz')"]
       interval: 10s
       timeout: 5s
       retries: 12
-      start_period: 30s
+      start_period: 1h
 ```
 
 Create `.env` beside it:
@@ -125,8 +125,8 @@ Settings.
 
 ## Daily use
 
-- Press Record, speak, then stop. SHAD shows local safety, upload progress, and
-  server confirmation.
+- Press Record, speak, then stop. Every audio row shows whether its bytes are on
+  this device, on the server, queued, transcribing, complete, or failed.
 - Add text, images, or video to the same day.
 - Search diary text, transcripts, and tags.
 - Create reflections across a date range. Speech requires `OPENROUTER_API_KEY`.

@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.3.0] - 2026-09-04
+
+### Added
+
+- Show device, server, and transcription state on every audio row.
+- Let users requeue failed or missing transcriptions.
+
+### Changed
+
+- Gate startup and published-image checks on transcription readiness.
+
+### Fixed
+
+- Allow slow CPU transcription to exceed five minutes and survive outages.
+- Recover failed or missing jobs during upgrades and archive reconstruction.
+- Finalize uploads and enqueue transcription in one database transaction.
+- Preserve model-cache ownership in verification and release checks.
+- Log inference failures with their server-side exception details.
+
 ## [0.2.0] - 2026-08-28
 
 ### Added

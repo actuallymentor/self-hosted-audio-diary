@@ -22,12 +22,23 @@ mkdir -p "$runtime_local/app" "$runtime_local/diary" "$runtime_local/recovered-a
 chmod 0777 "$runtime_local/app" "$runtime_local/diary" "$runtime_local/recovered-app" "$runtime_local/artifacts"
 
 export APP_DATA_PATH="$runtime_host/app"
+export APP_GID="${APP_GID:-$(stat -c %g "$workspace_local")}"
 export APP_PORT=0
+export APP_UID="${APP_UID:-$(stat -c %u "$workspace_local")}"
 export APP_VERSION="$package_version"
 export DIARY_DATA_PATH="$runtime_host/diary"
 export TRANSCRIPTION_MODEL_CACHE_PATH="${TRANSCRIPTION_MODEL_CACHE_PATH:-$workspace_host/.test-runtime/models}"
 export VERIFY_ARTIFACTS_PATH="$runtime_host/artifacts"
 export VERIFY_WORKSPACE_PATH="$workspace_host"
+
+run_as_workspace_owner() {
+    if [ "$(id -u)" = "$APP_UID" ]; then
+        "$@"
+        return
+    fi
+
+    setpriv --reuid="$APP_UID" --regid="$APP_GID" --clear-groups "$@"
+}
 
 wait_for_app() {
     for attempt in $(seq 1 120); do
@@ -99,7 +110,11 @@ docker version >/dev/null
 docker compose version >/dev/null
 node --version | grep -Eq '^v24\.'
 npm --version >/dev/null
-df -Pk "$workspace_local" | awk 'NR == 2 && $4 < 8388608 { exit 1 }'
+available_kb=$(df -Pk "$workspace_local" | awk 'NR == 2 { print $4 }')
+model_cache_kb=$(du -sk "$workspace_local/.test-runtime/models" 2>/dev/null | awk '{ print $1 }')
+
+# A restored model cache already consumed the largest first-run allocation.
+[ "$((available_kb + ${model_cache_kb:-0}))" -ge 8388608 ]
 
 # The rendered configuration is retained on failure and uploaded by CI. Validate
 # the shape without ever serializing runtime credentials into that artifact.
@@ -114,8 +129,8 @@ if grep -Eq 'DOCKERHUB_(TOKEN|USERNAME)' "$runtime_local/artifacts/compose-rende
 fi
 
 echo "[verify] source gates"
-npm run lint:check
-npm run build
+run_as_workspace_owner npm run lint:check
+run_as_workspace_owner npm run build
 
 echo "[verify] production images"
 "${compose[@]}" build app

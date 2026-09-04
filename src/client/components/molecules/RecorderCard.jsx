@@ -1,8 +1,10 @@
 import React, { useRef, useState } from "react"
+import { useLiveQuery } from "dexie-react-hooks"
 import toast from "react-hot-toast"
 import styled from "styled-components"
 
 import { DurableRecorder, queue_media_file } from "../../modules/recorder/recorder.js"
+import { diary_database } from "../../modules/storage/database.js"
 import { sync_outbox } from "../../modules/sync/outbox.js"
 import { Button } from "../atoms/Button.jsx"
 import { Status } from "../atoms/Status.jsx"
@@ -50,9 +52,16 @@ const HiddenInput = styled.input`position: absolute; height: 1px; width: 1px; op
  */
 export function RecorderCard( { account_id, on_saved } ) {
     const [ state, set_state ] = useState( `idle` )
+    const [ recording_id, set_recording_id ] = useState( null )
     const recorder = useRef( null )
     const photo_input = useRef( null )
     const video_input = useRef( null )
+    const saved_recording = useLiveQuery(
+        () => recording_id ? diary_database.recordings.get( recording_id ) : null,
+        [ recording_id ],
+        null,
+    )
+    const visible_state = saved_recording?.status ?? state
 
     async function toggle_recording() {
         try {
@@ -63,6 +72,7 @@ export function RecorderCard( { account_id, on_saved } ) {
 
             recorder.current = new DurableRecorder( account_id, next => {
                 set_state( next.status )
+                set_recording_id( next.id )
 
                 if( next.status === `saved_local` ) {
                     toast.success( `Recording saved on this device` )
@@ -96,12 +106,12 @@ export function RecorderCard( { account_id, on_saved } ) {
         <h2 id="record-heading">What happened?</h2>
         <p>Your audio is saved here before it syncs.</p>
         <Record
-            $recording={ state === `recording` }
-            aria-pressed={ state === `recording` }
+            $recording={ visible_state === `recording` }
+            aria-pressed={ visible_state === `recording` }
             onClick={ toggle_recording }
             type="button"
-        >{ state === `recording` ? `Stop` : `Record` }</Record>
-        { state !== `idle` && <div><Status value={ state } /></div> }
+        >{ visible_state === `recording` ? `Stop` : `Record` }</Record>
+        { visible_state !== `idle` && <div><Status value={ visible_state } /></div> }
         <Secondary>
             <Button onClick={ () => photo_input.current.click() }>Add photo</Button>
             <Button onClick={ () => video_input.current.click() }>Add video</Button>

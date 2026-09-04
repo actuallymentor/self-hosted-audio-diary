@@ -115,6 +115,15 @@ jobs:
       TRANSCRIBER_IMAGE: ${{ vars.DOCKERHUB_TRANSCRIBER_IMAGE }}
       VERSION: ${{ needs.verify.outputs.version }}
     steps:
+      - name: Check out published source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Restore pinned speech-model cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .test-runtime/models
+          key: large-v3-edaa852ec7e145841d8ffdb056a99866-${{ runner.os }}-${{ runner.arch }}
+
       - name: Sign in to Docker Hub
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
@@ -170,37 +179,51 @@ jobs:
         run: |
           set -Eeuo pipefail
 
+          docker network create shad-published-network >/dev/null
           docker volume create shad-published-app >/dev/null
           docker volume create shad-published-diary >/dev/null
-          docker volume create shad-published-models >/dev/null
+
+          docker run --detach --name shad-published-transcriber \
+            --env APP_GID=$(id -g) \
+            --env APP_UID=$(id -u) \
+            --env TRANSCRIPTION_OFFLINE=true \
+            --network shad-published-network \
+            --network-alias transcriber \
+            --publish 127.0.0.1:8000:8000 \
+            --volume "$GITHUB_WORKSPACE/.test-runtime/models:/var/lib/transcriber/huggingface" \
+            "$TRANSCRIBER_IMAGE:$VERSION"
 
           docker run --detach --name shad-published-app \
+            --env TRANSCRIPTION_URL=http://transcriber:8000 \
+            --network shad-published-network \
             --publish 127.0.0.1:3000:3000 \
             --volume shad-published-app:/data/app \
             --volume shad-published-diary:/data/diary \
             "$APP_IMAGE:$VERSION"
 
-          docker run --detach --name shad-published-transcriber \
-            --env TRANSCRIPTION_OFFLINE=true \
-            --publish 127.0.0.1:8000:8000 \
-            --volume shad-published-models:/var/lib/transcriber/huggingface \
-            "$TRANSCRIBER_IMAGE:$VERSION"
-
-          for attempt in $(seq 1 30); do
+          for attempt in $(seq 1 360); do
             if curl --fail --silent http://127.0.0.1:3000/health/ready | jq -e '.status == "ok"' >/dev/null && \
-              curl --fail --silent http://127.0.0.1:8000/healthz | jq -e '.status == "ok"' >/dev/null; then
-              exit 0
+              curl --fail --silent http://127.0.0.1:8000/readyz | jq -e '.status == "ready"' >/dev/null; then
+              break
             fi
 
-            sleep 2
+            sleep 10
           done
 
-          docker logs shad-published-app
-          docker logs shad-published-transcriber
-          exit 1
+          curl --fail --silent http://127.0.0.1:8000/readyz | jq -e '.status == "ready"' >/dev/null
+          docker run --rm --network shad-published-network --entrypoint node \
+            "$APP_IMAGE:$VERSION" -e \
+            "fetch('http://transcriber:8000/readyz').then(response => { if (!response.ok) process.exit(1) })"
+          curl --fail --silent \
+            --form file=@tests/fixtures/audio/fake-microphone.wav \
+            --form language=mixed \
+            --form model=large-v3 \
+            --form response_format=verbose_json \
+            http://127.0.0.1:8000/v1/audio/transcriptions >/dev/null
 
       - name: Clean published-image smoke test
         if: always()
         run: |
           docker rm --force shad-published-app shad-published-transcriber 2>/dev/null || true
-          docker volume rm shad-published-app shad-published-diary shad-published-models 2>/dev/null || true
+          docker volume rm shad-published-app shad-published-diary 2>/dev/null || true
+          docker network rm shad-published-network 2>/dev/null || true

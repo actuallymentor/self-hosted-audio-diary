@@ -150,6 +150,11 @@ test( `real Chrome captures, syncs, searches, and relaunches offline`, {
     await new Promise( resolve => setTimeout( resolve, 1_500 ) )
     await click_text( page, `button`, `Stop` )
     await page.waitForFunction( () => document.body.textContent.includes( `Saved on this device` ) )
+    await page.waitForFunction( () => [ ...document.querySelectorAll( `li` ) ].some( item =>
+        item.textContent.includes( `On this device` )
+        && item.textContent.includes( `Not yet on server` )
+        && item.textContent.includes( `Transcription waits for upload` )
+    ) )
     mark( `recording durable locally` )
     await chunk_started
     await page.waitForFunction( () => document.body.textContent.includes( `Uploading recording` ) )
@@ -188,6 +193,12 @@ test( `real Chrome captures, syncs, searches, and relaunches offline`, {
     }
     mark( `recording durable on server` )
     await page.waitForFunction( () => !document.body.textContent.includes( `Device outbox` ) )
+    await page.waitForFunction( () => [ ...document.querySelectorAll( `li` ) ].some( item =>
+        item.querySelector( `audio` )
+        && item.textContent.includes( `Not on this device` )
+        && item.textContent.includes( `On server` )
+        && ( item.textContent.includes( `Queued` ) || item.textContent.includes( `Transcribing` ) )
+    ) )
     assert.equal( dropped_status_requests, 1 )
     assert.equal( chunk_requests, 1 )
     mark( `lost final acknowledgment resumed without re-upload` )

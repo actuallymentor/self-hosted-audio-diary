@@ -366,22 +366,26 @@ async function complete_upload_locked( runtime, user, input ) {
         } )
         project_item( runtime, user, upload.local_date, item )
 
-        runtime.database.prepare( `
-            UPDATE uploads
-            SET status = 'complete', item_id = ?, whole_sha256 = ?,
-              total_bytes = ?, finalizing_at = NULL, updated_at = ?
-            WHERE id = ?
-        ` ).run( item.id, whole_sha256, total_bytes, Date.now(), upload.id )
-        runtime.database.prepare( `DELETE FROM upload_chunks WHERE upload_id = ?` ).run( upload.id )
+        // Commit server durability and derived work together. A crash can leave
+        // projections to repair, but never a completed upload without its job.
+        runtime.database.transaction( () => {
+            runtime.database.prepare( `
+                UPDATE uploads
+                SET status = 'complete', item_id = ?, whole_sha256 = ?,
+                  total_bytes = ?, finalizing_at = NULL, updated_at = ?
+                WHERE id = ?
+            ` ).run( item.id, whole_sha256, total_bytes, Date.now(), upload.id )
+            runtime.database.prepare( `DELETE FROM upload_chunks WHERE upload_id = ?` ).run( upload.id )
 
-        if( item.type === `audio` ) {
-            runtime.jobs.enqueue( runtime, {
-                dedupe_key: `${ item.id }:${ item.sha256 }`,
-                payload: { item_id: item.id },
-                type: `transcription`,
-                user_id: user.id,
-            } )
-        }
+            if( item.type === `audio` ) {
+                runtime.jobs.enqueue( runtime, {
+                    dedupe_key: `${ item.id }:${ item.sha256 }`,
+                    payload: { item_id: item.id },
+                    type: `transcription`,
+                    user_id: user.id,
+                } )
+            }
+        } )()
 
         await fs.rm( root, { force: true, recursive: true } )
 

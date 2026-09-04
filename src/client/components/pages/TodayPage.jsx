@@ -5,7 +5,7 @@ import styled from "styled-components"
 
 import { api } from "../../modules/api/client.js"
 import { current_capture } from "../../modules/recorder/recorder.js"
-import { diary_database } from "../../modules/storage/database.js"
+import { list_local_recordings } from "../../modules/storage/database.js"
 import { queue_text, sync_outbox } from "../../modules/sync/outbox.js"
 import { use_session } from "../../stores/session.js"
 import { Button } from "../atoms/Button.jsx"
@@ -115,13 +115,17 @@ export function TodayPage() {
     const { local_date } = current_capture()
     const [ day, set_day ] = useState( { items: [], tags: [] } )
     const [ loading, set_loading ] = useState( true )
-    const pending = useLiveQuery(
-        () => diary_database.recordings.where( `account_id` ).equals( user.id ).toArray(),
+    const local_recordings = useLiveQuery(
+        () => list_local_recordings( user.id ),
         [ user.id ],
         [],
-    ).filter( recording => recording.status !== `uploaded` )
+    )
+    const pending = local_recordings.filter( recording => recording.status !== `uploaded` )
     const uploading = pending.filter( recording => recording.status === `syncing` )
     const outbox = pending.filter( recording => recording.status !== `syncing` )
+    const day_recordings = local_recordings.filter( recording =>
+        recording.capture.local_date === local_date
+    )
 
     const refresh = useCallback( async () => {
         try {
@@ -142,6 +146,18 @@ export function TodayPage() {
 
         return () => window.removeEventListener( `shad:synchronized`, refresh )
     }, [ refresh, user.id ] )
+
+    useEffect( () => {
+        const waiting = day.items.some( item =>
+            [ `queued`, `transcribing` ].includes( item.recording_status?.transcription )
+        )
+
+        if( !waiting ) return undefined
+
+        const timer = setInterval( () => void refresh(), 5_000 )
+
+        return () => clearInterval( timer )
+    }, [ day.items, refresh ] )
 
     async function save_text( event ) {
         event.preventDefault()
@@ -201,6 +217,6 @@ export function TodayPage() {
             </label>
             <Button type="submit">Save tags</Button>
         </TagForm>
-        { loading ? <p>Loading your day…</p> : <Timeline items={ day.items } on_changed={ refresh } /> }
+        { loading ? <p>Loading your day…</p> : <Timeline items={ day.items } local_recordings={ day_recordings } on_changed={ refresh } /> }
     </>
 }

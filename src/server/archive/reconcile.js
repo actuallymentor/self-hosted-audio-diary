@@ -111,6 +111,16 @@ export async function reconcile_archive( runtime ) {
                         email: profile.email,
                         id: profile.user_id,
                     }, local_date, item )
+
+                    if( item.type === `audio` && !item.transcript ) {
+                        runtime.jobs.enqueue( runtime, {
+                            dedupe_key: `${ item.id }:${ item.sha256 }`,
+                            payload: { item_id: item.id },
+                            type: `transcription`,
+                            user_id: profile.user_id,
+                        } )
+                    }
+
                     report.items += 1
                 } catch ( error ) {
                     report.conflicts.push( {

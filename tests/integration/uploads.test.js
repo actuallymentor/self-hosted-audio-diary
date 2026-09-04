@@ -13,7 +13,7 @@ const execute_file = promisify( execFile )
 test( `resumes immutable chunks, finalizes media, and serves byte ranges`, async t => {
     const server = await start_test_server()
     t.after( () => server.close() )
-    const { client, user } = await bootstrap_client( server.base_url )
+    const { client } = await bootstrap_client( server.base_url )
     const target = path.join( server.root, `fixture.wav` )
 
     await execute_file( `ffmpeg`, [
@@ -56,6 +56,33 @@ test( `resumes immutable chunks, finalizes media, and serves byte ranges`, async
 
     assert.equal( part.response.status, 200 )
     assert.equal( duplicate.response.status, 200 )
+
+    const original_jobs = server.runtime.jobs
+
+    server.runtime.jobs = {
+        ...original_jobs,
+        enqueue() {
+            throw new Error( `Injected enqueue interruption` )
+        },
+    }
+
+    const interrupted = await client.request( `/api/v1/uploads/${ upload_id }/complete`, {
+        json: { chunk_hashes: [ digest ], total_bytes: bytes.length, whole_sha256: digest },
+        method: `POST`,
+    } )
+    const interrupted_upload = server.runtime.database.prepare( `
+        SELECT status FROM uploads WHERE id = ?
+    ` ).get( upload_id )
+    const retained_chunks = server.runtime.database.prepare( `
+        SELECT COUNT(*) AS count FROM upload_chunks WHERE upload_id = ?
+    ` ).get( upload_id ).count
+
+    assert.equal( interrupted.response.status, 500 )
+    assert.equal( interrupted_upload.status, `receiving` )
+    assert.equal( retained_chunks, 1 )
+    assert.equal( server.runtime.database.prepare( `SELECT COUNT(*) AS count FROM jobs` ).get().count, 0 )
+
+    server.runtime.jobs = original_jobs
 
     const completions = await Promise.all( [ 1, 2 ].map( () =>
         client.request( `/api/v1/uploads/${ upload_id }/complete`, {
@@ -105,26 +132,40 @@ test( `resumes immutable chunks, finalizes media, and serves byte ranges`, async
     assert.equal( overlong.response.status, 206 )
     assert.equal( overlong.response.headers.get( `content-length` ), String( bytes.length ) )
 
-    const original_fetch = globalThis.fetch
+    const queued_day = await client.request( `/api/v1/days/2026-08-25` )
+
+    assert.deepEqual( queued_day.result.items[0].recording_status, {
+        remote: `present`,
+        transcription: `queued`,
+    } )
+
+    const transcription_job = server.runtime.jobs.lease( server.runtime, `test-worker` )
+    const transcribing_day = await client.request( `/api/v1/days/2026-08-25` )
+
+    assert.equal( transcribing_day.result.items[0].recording_status.transcription, `transcribing` )
+
+    const original_fetch = server.runtime.transcription_fetch
 
     try {
-        globalThis.fetch = async () => Response.json( {
+        server.runtime.transcription_fetch = async () => Response.json( {
             language: null,
             model: `large-v3`,
             text: ``,
         } )
-        await server.runtime.job_handlers.transcription( server.runtime, {
-            payload: { item_id: upload_id },
-            user_id: user.id,
-        } )
+        await server.runtime.job_handlers.transcription( server.runtime, transcription_job )
+        server.runtime.jobs.finish( server.runtime, transcription_job )
     } finally {
-        globalThis.fetch = original_fetch
+        server.runtime.transcription_fetch = original_fetch
     }
 
     const silent_item = server.runtime.database.prepare( `SELECT display_text FROM items WHERE id = ?` )
         .get( upload_id )
 
     assert.equal( silent_item.display_text, `` )
+
+    const complete_day = await client.request( `/api/v1/days/2026-08-25` )
+
+    assert.equal( complete_day.result.items[0].recording_status.transcription, `complete` )
 } )
 
 test( `expires only stale incomplete staging and retains client-retry semantics`, async t => {

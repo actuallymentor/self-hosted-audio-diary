@@ -4,11 +4,21 @@ import fs_promises from "node:fs/promises"
 import path from "node:path"
 import { promisify } from "node:util"
 
+import { Agent, fetch as undici_fetch, FormData } from "undici"
+
 import { atomic_write } from "../archive/atomic_write.js"
 import { day_paths, update_day } from "../archive/day_store.js"
 import { confined_path } from "../archive/paths.js"
 
 const execute_file = promisify( execFile )
+const transcription_timeout_ms = 30 * 60 * 1000
+
+// Node's fetch otherwise gives up after five minutes without response headers.
+// CPU transcription often needs longer, especially on small production hosts.
+const transcription_dispatcher = new Agent( {
+    bodyTimeout: transcription_timeout_ms,
+    headersTimeout: transcription_timeout_ms,
+} )
 
 /**
  * Transcribe one canonical audio item through the engine-neutral service.
@@ -57,10 +67,12 @@ export async function transcribe_item( runtime, job ) {
         form.append( `language`, `mixed` )
         form.append( `response_format`, `verbose_json` )
 
-        const response = await fetch( `${ runtime.config.TRANSCRIPTION_URL }/v1/audio/transcriptions`, {
+        const request = runtime.transcription_fetch ?? undici_fetch
+        const response = await request( `${ runtime.config.TRANSCRIPTION_URL }/v1/audio/transcriptions`, {
             body: form,
+            dispatcher: transcription_dispatcher,
             method: `POST`,
-            signal: AbortSignal.timeout( 30 * 60 * 1000 ),
+            signal: AbortSignal.timeout( transcription_timeout_ms ),
         } )
 
         if( !response.ok ) throw new Error( `Transcriber returned ${ response.status }` )

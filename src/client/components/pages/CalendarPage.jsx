@@ -1,9 +1,12 @@
-import React, { useEffect, useState } from "react"
+import React, { useCallback, useEffect, useState } from "react"
+import { useLiveQuery } from "dexie-react-hooks"
 import { StringParam, useQueryParam, withDefault } from "use-query-params"
 import styled from "styled-components"
 
 import { api } from "../../modules/api/client.js"
 import { current_capture } from "../../modules/recorder/recorder.js"
+import { list_local_recordings } from "../../modules/storage/database.js"
+import { use_session } from "../../stores/session.js"
 import { Timeline } from "../molecules/Timeline.jsx"
 
 const Picker = styled.label`
@@ -18,20 +21,35 @@ const Picker = styled.label`
  * @returns {React.ReactElement}
  */
 export default function CalendarPage() {
+    const user = use_session( state => state.user )
     const [ date, set_date ] = useQueryParam( `date`, withDefault( StringParam, current_capture().local_date ) )
     const [ day, set_day ] = useState( null )
+    const local_recordings = useLiveQuery(
+        () => list_local_recordings( user.id ),
+        [ user.id ],
+        [],
+    ).filter( recording => recording.capture.local_date === date )
+    const refresh = useCallback( async () => {
+        set_day( await api( `/days/${ date }` ) )
+    }, [ date ] )
 
     useEffect( () => {
-        let active = true
+        void refresh()
+    }, [ refresh ] )
 
-        api( `/days/${ date }` ).then( value => {
-            if( active ) set_day( value )
-        } )
+    useEffect( () => {
+        const waiting = day?.items.some( item =>
+            [ `queued`, `transcribing` ].includes( item.recording_status?.transcription )
+        )
 
-        return () => {
-            active = false
-        }
-    }, [ date ] )
+        if( !waiting ) return undefined
+
+        const timer = setInterval( () => {
+            void refresh()
+        }, 5_000 )
+
+        return () => clearInterval( timer )
+    }, [ day?.items, refresh ] )
 
     return <main>
         <h2>Calendar</h2>
@@ -39,6 +57,10 @@ export default function CalendarPage() {
             <strong>Diary date</strong>
             <input onChange={ event => set_date( event.target.value ) } type="date" value={ date } />
         </Picker>
-        <Timeline items={ day?.items ?? [] } />
+        <Timeline
+            items={ day?.items ?? [] }
+            local_recordings={ local_recordings }
+            on_changed={ refresh }
+        />
     </main>
 }

@@ -221,6 +221,17 @@ const migrations = [
             ALTER TABLE uploads ADD COLUMN finalizing_at INTEGER;
         `,
     },
+    {
+        version: 3,
+        sql: `
+            UPDATE jobs
+            SET status = 'queued', attempts = 0,
+              run_after = CAST(strftime('%s', 'now') AS INTEGER) * 1000,
+              lease_owner = NULL, lease_expires_at = NULL, last_error = NULL,
+              updated_at = CAST(strftime('%s', 'now') AS INTEGER) * 1000
+            WHERE type = 'transcription' AND status = 'failed';
+        `,
+    },
 ]
 
 /**

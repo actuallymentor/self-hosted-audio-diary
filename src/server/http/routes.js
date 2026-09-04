@@ -268,6 +268,14 @@ export async function register_routes( app, runtime ) {
         return runtime.diary.edit_item_text( runtime, request.user, item_id, text )
     } )
 
+    app.post( `${ api_prefix }/items/:item_id/transcription`, unsafe, async request => {
+        return runtime.diary.retry_transcription(
+            runtime,
+            request.user,
+            uuid_schema.parse( request.params.item_id ),
+        )
+    } )
+
     app.delete( `${ api_prefix }/items/:item_id`, unsafe, async request => {
         return runtime.diary.trash_item(
             runtime,
