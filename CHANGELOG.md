@@ -24,6 +24,7 @@
 - Distinguish confirmed empty days from unavailable server data.
 - Classify request abort and body timeouts as bounded transcription failures.
 - Preserve release diagnostics when published-image readiness fails or is cancelled.
+- Handle an empty model cache and retain hidden verifier evidence on clean CI runners.
 
 ## [0.2.0] - 2026-08-28
 

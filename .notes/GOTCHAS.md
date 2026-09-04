@@ -7,6 +7,9 @@
   mixing the global and package implementations silently breaks multipart uploads.
 - When verification runs through `sudo`, test service IDs must come from the
   workspace owner so the restored model cache stays readable and writable.
+- Under `set -o pipefail`, probing an optional model-cache directory must first
+  test that it exists; a failing `du` exits the verifier before any diagnostics.
+- GitHub artifact uploads exclude `.test-runtime` unless hidden files are enabled.
 - Archive reconciliation must project completed job rows for existing transcripts;
   otherwise startup repair queues the entire recovered audio archive again.
 - App availability must depend only on the transcriber process starting. Model

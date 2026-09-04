@@ -111,3 +111,4 @@ jobs:
           name: verification-artifacts
           path: .test-runtime/verify-*/artifacts
           if-no-files-found: ignore
+          include-hidden-files: true

@@ -53,3 +53,6 @@
   empty day from unavailable server data in the browser gate.
 - 2026-09-04 — Empty-day copy was separated from explicit fetch failure so a normal
   post-sync refetch never flashes a false server outage.
+- 2026-09-04 — The first pushed CI run passed quality and both native architectures,
+  then exposed a clean-cache preflight exit and hidden-artifact omission. Both
+  deployment diagnostics were corrected before release.

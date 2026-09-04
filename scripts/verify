@@ -118,10 +118,19 @@ docker compose version >/dev/null
 node --version | grep -Eq '^v24\.'
 npm --version >/dev/null
 available_kb=$(df -Pk "$workspace_local" | awk 'NR == 2 { print $4 }')
-model_cache_kb=$(du -sk "$workspace_local/.test-runtime/models" 2>/dev/null | awk '{ print $1 }')
+model_cache_kb=0
+
+if [ -d "$workspace_local/.test-runtime/models" ]; then
+    model_cache_kb=$(du -sk "$workspace_local/.test-runtime/models" | awk '{ print $1 }')
+fi
 
 # A restored model cache already consumed the largest first-run allocation.
-[ "$((available_kb + ${model_cache_kb:-0}))" -ge 8388608 ]
+usable_kb=$((available_kb + model_cache_kb))
+
+if [ "$usable_kb" -lt 8388608 ]; then
+    echo "Verification needs 8 GiB free, including any restored model cache." >&2
+    exit 1
+fi
 
 # The rendered configuration is retained on failure and uploaded by CI. Validate
 # the shape without ever serializing runtime credentials into that artifact.
