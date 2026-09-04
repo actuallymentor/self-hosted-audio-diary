@@ -25,6 +25,7 @@ export default function CalendarPage() {
     const user = use_session( state => state.user )
     const [ date, set_date ] = useQueryParam( `date`, withDefault( StringParam, current_capture().local_date ) )
     const active_date = useRef( date )
+    const refresh_generation = useRef( 0 )
     const [ remote, set_remote ] = useState( {
         date: null,
         day: null,
@@ -46,6 +47,10 @@ export default function CalendarPage() {
         [],
     ).filter( recording => recording.capture.local_date === date )
     const refresh = useCallback( async ( { invalidate = false, quiet = false } = {} ) => {
+        const generation = refresh_generation.current + 1
+
+        refresh_generation.current = generation
+
         if( invalidate ) {
             set_remote( current => current.date === date
                 ? { ...current, loaded: false }
@@ -56,11 +61,11 @@ export default function CalendarPage() {
         try {
             const next = await api( `/days/${ date }` )
 
-            if( active_date.current === date ) {
+            if( active_date.current === date && refresh_generation.current === generation ) {
                 set_remote( { date, day: next, loaded: true, settled: true } )
             }
         } catch ( error ) {
-            if( active_date.current !== date ) return
+            if( active_date.current !== date || refresh_generation.current !== generation ) return
 
             set_remote( current => ( {
                 date,

@@ -94,8 +94,11 @@ export function Timeline( {
     remote_loaded = false,
 } ) {
     const timeline_items = merge_items( items, local_recordings, remote_loaded )
+    const empty_message = remote_loaded
+        ? `No entries yet. Your day can start with one thought.`
+        : `This day could not be loaded. Try again when the server is available.`
 
-    if( !timeline_items.length ) return <p>No entries yet. Your day can start with one thought.</p>
+    if( !timeline_items.length ) return <p>{ empty_message }</p>
 
     async function edit( item ) {
         const current = item.type === `text` ? item.text : item.display_transcript

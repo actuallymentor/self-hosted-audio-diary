@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react"
+import React, { useCallback, useEffect, useRef, useState } from "react"
 import { useLiveQuery } from "dexie-react-hooks"
 import toast from "react-hot-toast"
 import styled from "styled-components"
@@ -116,6 +116,7 @@ export function TodayPage() {
     const [ day, set_day ] = useState( { items: [], tags: [] } )
     const [ loading, set_loading ] = useState( true )
     const [ remote_loaded, set_remote_loaded ] = useState( false )
+    const refresh_generation = useRef( 0 )
     const local_recordings = useLiveQuery(
         () => list_local_recordings( user.id ),
         [ user.id ],
@@ -129,17 +130,25 @@ export function TodayPage() {
     )
 
     const refresh = useCallback( async ( { invalidate = false, quiet = false } = {} ) => {
+        const generation = refresh_generation.current + 1
+
+        refresh_generation.current = generation
         if( invalidate ) set_remote_loaded( false )
 
         try {
             const next = await api( `/days/${ local_date }` )
+
+            if( refresh_generation.current !== generation ) return
+
             set_day( next )
             set_remote_loaded( true )
         } catch ( error ) {
+            if( refresh_generation.current !== generation ) return
+
             set_remote_loaded( false )
             if( !quiet && navigator.onLine ) toast.error( error.message )
         } finally {
-            set_loading( false )
+            if( refresh_generation.current === generation ) set_loading( false )
         }
     }, [ local_date ] )
 

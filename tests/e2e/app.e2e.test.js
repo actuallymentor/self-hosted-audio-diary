@@ -25,6 +25,16 @@ async function click_text( page, selector, text ) {
     assert.ok( clicked, `Expected ${ selector } with text ${ text }` )
 }
 
+async function choose_date( page, date ) {
+    await page.$eval( `input[type=date]`, ( element, next_date ) => {
+        const value = Object.getOwnPropertyDescriptor( HTMLInputElement.prototype, `value` ).set
+
+        value.call( element, next_date )
+        element.dispatchEvent( new Event( `input`, { bubbles: true } ) )
+        element.dispatchEvent( new Event( `change`, { bubbles: true } ) )
+    }, date )
+}
+
 test( `real Chrome captures, syncs, searches, and relaunches offline`, {
     skip: !base_url ? `APP_BASE_URL is required` : false,
     timeout: 180_000,
@@ -212,6 +222,7 @@ test( `real Chrome captures, syncs, searches, and relaunches offline`, {
     mark( `calendar recording state loaded` )
 
     const empty_date = `2000-01-02`
+    const failed_date = `2000-01-03`
     const { promise: calendar_request_started, resolve: report_calendar_request } = Promise.withResolvers()
     const { promise: calendar_request_released, resolve: release_calendar_request } = Promise.withResolvers()
     const hold_calendar_request = request => {
@@ -223,25 +234,26 @@ test( `real Chrome captures, syncs, searches, and relaunches offline`, {
             return
         }
 
+        if( request.method() === `GET` && pathname.endsWith( `/days/${ failed_date }` ) ) {
+            void request.abort( `failed` )
+            return
+        }
+
         void request.continue()
     }
 
     await page.setRequestInterception( true )
     page.on( `request`, hold_calendar_request )
-    await page.$eval( `input[type=date]`, ( element, next_date ) => {
-        const value = Object.getOwnPropertyDescriptor( HTMLInputElement.prototype, `value` ).set
-
-        value.call( element, next_date )
-        element.dispatchEvent( new Event( `input`, { bubbles: true } ) )
-        element.dispatchEvent( new Event( `change`, { bubbles: true } ) )
-    }, empty_date )
+    await choose_date( page, empty_date )
     await calendar_request_started
     await page.waitForFunction( () => document.body.textContent.includes( `Loading your day…` ) )
     release_calendar_request()
     await page.waitForFunction( () => document.body.textContent.includes( `No entries yet` ) )
+    await choose_date( page, failed_date )
+    await page.waitForFunction( () => document.body.textContent.includes( `This day could not be loaded` ) )
     page.off( `request`, hold_calendar_request )
     await page.setRequestInterception( false )
-    mark( `calendar date change waits for fresh state` )
+    mark( `calendar date change distinguishes empty and unavailable state` )
 
     await click_text( page, `a`, `Today` )
     await page.waitForSelector( `textarea[name=note]` )

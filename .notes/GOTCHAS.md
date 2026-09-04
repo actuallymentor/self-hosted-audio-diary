@@ -16,6 +16,8 @@
   and describe the upload acknowledgment as historical.
 - A synchronization event invalidates day absence before refetching. Background
   transcription polls stay quiet and mark the remote snapshot stale on failure.
+- Dispatch synchronization after each completed outbox item, not after the batch;
+  sequence day requests so an older response cannot undo invalidation.
 - Interrupted-capture browser gates must wait for IndexedDB status recovery. DOM
   text can briefly omit the still-persisted `recording` row during page startup.
 - Published-image readiness loops must finish inside the job timeout so diagnostics

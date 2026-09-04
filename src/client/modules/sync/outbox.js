@@ -276,7 +276,6 @@ export async function sync_outbox( account_id ) {
     sync_running = true
     clearTimeout( retry_timer )
     retry_timer = null
-    let synchronized = false
 
     try {
         await recover_interrupted_recordings( account_id )
@@ -293,7 +292,7 @@ export async function sync_outbox( account_id ) {
         for( const recording of recordings ) {
             try {
                 await sync_recording( recording )
-                synchronized = true
+                window.dispatchEvent( new CustomEvent( `shad:synchronized` ) )
             } catch ( error ) {
                 const status = sync_failure_status( error )
                 const attempts = ( recording.attempts ?? 0 ) + 1
@@ -318,7 +317,7 @@ export async function sync_outbox( account_id ) {
         for( const operation of operations ) {
             try {
                 await sync_operation( operation )
-                synchronized = true
+                window.dispatchEvent( new CustomEvent( `shad:synchronized` ) )
             } catch ( error ) {
                 const status = sync_failure_status( error )
                 const attempts = ( operation.attempts ?? 0 ) + 1
@@ -334,6 +333,5 @@ export async function sync_outbox( account_id ) {
         }
     } finally {
         sync_running = false
-        if( synchronized ) window.dispatchEvent( new CustomEvent( `shad:synchronized` ) )
     }
 }

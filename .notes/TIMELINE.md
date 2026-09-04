@@ -48,3 +48,6 @@
 - 2026-09-04 — Final UX review invalidated stale day snapshots on synchronization,
   silenced background polling failures, and added real Calendar navigation/loading
   coverage before release.
+- 2026-09-04 — Per-item sync invalidation and ordered day fetches closed the final
+  transient recording-disappearance window. Calendar now distinguishes a confirmed
+  empty day from unavailable server data in the browser gate.
