@@ -18,11 +18,13 @@ function retry_without_limit( job, error ) {
     if( job.type !== `transcription` ) return false
 
     const transcriber_status = String( error.message ?? `` ).match( /^Transcriber returned (\d{3})$/ )
+    const cause_code = String( error.cause?.code ?? `` ).toUpperCase()
     const status = Number( transcriber_status?.[1] )
 
     if( [ 408, 425, 429 ].includes( status ) || status >= 500 ) return true
+    if( cause_code === `UND_ERR_HEADERS_TIMEOUT` ) return false
 
-    return error.message === `fetch failed` || Boolean( error.cause?.code )
+    return error.message === `fetch failed` || Boolean( cause_code )
 }
 
 /**

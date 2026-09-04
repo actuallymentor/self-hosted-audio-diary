@@ -3,6 +3,8 @@ set -Eeuo pipefail
 
 workspace_local=$(pwd -P)
 workspace_host=${BABYSIT_HOST_WORKSPACE:-$workspace_local}
+workspace_uid=$(stat -c %u "$workspace_local" 2>/dev/null || stat -f %u "$workspace_local")
+workspace_gid=$(stat -c %g "$workspace_local" 2>/dev/null || stat -f %g "$workspace_local")
 package_version=$(node -p "require('./package.json').version")
 run_name="verify-$(date -u +%Y%m%d-%H%M%S)-$$"
 runtime_local="$workspace_local/.test-runtime/$run_name"
@@ -22,9 +24,9 @@ mkdir -p "$runtime_local/app" "$runtime_local/diary" "$runtime_local/recovered-a
 chmod 0777 "$runtime_local/app" "$runtime_local/diary" "$runtime_local/recovered-app" "$runtime_local/artifacts"
 
 export APP_DATA_PATH="$runtime_host/app"
-export APP_GID="${APP_GID:-$(stat -c %g "$workspace_local")}"
+export APP_GID="${APP_GID:-$workspace_gid}"
 export APP_PORT=0
-export APP_UID="${APP_UID:-$(stat -c %u "$workspace_local")}"
+export APP_UID="${APP_UID:-$workspace_uid}"
 export APP_VERSION="$package_version"
 export DIARY_DATA_PATH="$runtime_host/diary"
 export TRANSCRIPTION_MODEL_CACHE_PATH="${TRANSCRIPTION_MODEL_CACHE_PATH:-$workspace_host/.test-runtime/models}"
@@ -37,7 +39,12 @@ run_as_workspace_owner() {
         return
     fi
 
-    setpriv --reuid="$APP_UID" --regid="$APP_GID" --clear-groups "$@"
+    if command -v setpriv >/dev/null 2>&1; then
+        setpriv --reuid="$APP_UID" --regid="$APP_GID" --clear-groups "$@"
+        return
+    fi
+
+    sudo -u "#$APP_UID" -g "#$APP_GID" "$@"
 }
 
 wait_for_app() {
@@ -220,8 +227,21 @@ import { create_runtime } from "./src/server/runtime/create_runtime.js"
 const runtime = create_runtime( read_config() )
 const users = runtime.database.prepare( `SELECT status FROM users` ).all()
 const items = runtime.database.prepare( `SELECT COUNT(*) AS count FROM items` ).get().count
+const incomplete_audio = runtime.database.prepare( `
+    SELECT COUNT(*) AS count
+    FROM items
+    LEFT JOIN jobs ON jobs.type = 'transcription'
+      AND json_extract(jobs.payload_json, '$.item_id') = items.id
+    WHERE items.type = 'audio'
+      AND (jobs.id IS NULL OR jobs.status != 'complete')
+` ).get().count
 
-if( !users.length || users.some( user => user.status !== `recovery_pending` ) || !items ) process.exit( 1 )
+if(
+    !users.length
+    || users.some( user => user.status !== `recovery_pending` )
+    || !items
+    || incomplete_audio
+) process.exit( 1 )
 runtime.database.close()
 NODE
 

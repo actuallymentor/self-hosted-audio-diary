@@ -42,7 +42,7 @@ function merge_items( items, local_recordings ) {
         remote_present: true,
     } ) )
     const local_only = local_audio
-        .filter( recording => !remote_ids.has( recording.id ) )
+        .filter( recording => recording.status !== `uploaded` && !remote_ids.has( recording.id ) )
         .map( recording => ( {
             capture: recording.capture,
             id: recording.id,

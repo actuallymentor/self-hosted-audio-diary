@@ -232,6 +232,13 @@ const migrations = [
             WHERE type = 'transcription' AND status = 'failed';
         `,
     },
+    {
+        version: 4,
+        sql: `
+            CREATE INDEX IF NOT EXISTS jobs_item
+            ON jobs(type, json_extract(payload_json, '$.item_id'), user_id);
+        `,
+    },
 ]
 
 /**

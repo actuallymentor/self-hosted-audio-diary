@@ -33,11 +33,11 @@ export async function request_durable_storage() {
  * @returns {Promise<object[]>}
  */
 export async function list_local_recordings( account_id ) {
-    const [ recordings, chunks ] = await Promise.all( [
+    const [ recordings, chunk_keys ] = await Promise.all( [
         diary_database.recordings.where( `account_id` ).equals( account_id ).toArray(),
-        diary_database.chunks.where( `account_id` ).equals( account_id ).toArray(),
+        diary_database.chunks.where( `account_id` ).equals( account_id ).primaryKeys(),
     ] )
-    const recordings_with_bytes = new Set( chunks.map( chunk => chunk.recording_id ) )
+    const recordings_with_bytes = new Set( chunk_keys.map( ( [ recording_id ] ) => recording_id ) )
 
     return recordings.map( recording => ( {
         ...recording,

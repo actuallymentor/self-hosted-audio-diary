@@ -45,7 +45,7 @@ test( `keeps unavailable transcription queued without overflowing its backoff`, 
     for( let attempt = 0; attempt < 20; attempt += 1 ) {
         const job = server.runtime.jobs.lease( server.runtime, `test-worker` )
         const error = new TypeError( `fetch failed`, {
-            cause: { code: `UND_ERR_HEADERS_TIMEOUT` },
+            cause: { code: `ECONNREFUSED` },
         } )
 
         server.runtime.jobs.finish( server.runtime, job, error )
@@ -58,8 +58,37 @@ test( `keeps unavailable transcription queued without overflowing its backoff`, 
 
     assert.equal( job.status, `queued` )
     assert.equal( job.attempts, 20 )
-    assert.equal( job.last_error, `transcriber_timeout` )
+    assert.equal( job.last_error, `transcriber_unavailable` )
     assert.equal( Number.isSafeInteger( job.run_after ), true )
+} )
+
+test( `makes repeated transcription timeouts terminal`, async t => {
+    const server = await start_test_server()
+
+    t.after( () => server.close() )
+
+    const { user } = await bootstrap_client( server.base_url )
+    const id = server.runtime.jobs.enqueue( server.runtime, {
+        dedupe_key: crypto.randomUUID(),
+        payload: { item_id: crypto.randomUUID() },
+        type: `transcription`,
+        user_id: user.id,
+    } )
+
+    for( let attempt = 0; attempt < 8; attempt += 1 ) {
+        const job = server.runtime.jobs.lease( server.runtime, `test-worker` )
+        const error = new TypeError( `fetch failed`, {
+            cause: { code: `UND_ERR_HEADERS_TIMEOUT` },
+        } )
+
+        server.runtime.jobs.finish( server.runtime, job, error )
+        server.runtime.database.prepare( `UPDATE jobs SET run_after = 0 WHERE id = ?` ).run( id )
+    }
+
+    assert.deepEqual(
+        server.runtime.database.prepare( `SELECT status, last_error FROM jobs WHERE id = ?` ).get( id ),
+        { last_error: `transcriber_timeout`, status: `failed` },
+    )
 } )
 
 test( `makes permanent transcription errors terminal and explicitly retryable`, async t => {

@@ -108,6 +108,7 @@ jobs:
   validate-published:
     needs: [verify, publish]
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     env:
       APP_DIGEST: ${{ needs.publish.outputs.app_digest }}
       APP_IMAGE: ${{ vars.DOCKERHUB_APP_IMAGE }}
@@ -121,6 +122,7 @@ jobs:
       - name: Restore pinned speech-model cache
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
+          fail-on-cache-miss: true
           path: .test-runtime/models
           key: large-v3-edaa852ec7e145841d8ffdb056a99866-${{ runner.os }}-${{ runner.arch }}
 
@@ -220,6 +222,12 @@ jobs:
             --form model=large-v3 \
             --form response_format=verbose_json \
             http://127.0.0.1:8000/v1/audio/transcriptions >/dev/null
+
+      - name: Published service diagnostics
+        if: failure()
+        run: |
+          docker logs shad-published-app 2>&1 || true
+          docker logs shad-published-transcriber 2>&1 || true
 
       - name: Clean published-image smoke test
         if: always()

@@ -7,6 +7,10 @@
   mixing the global and package implementations silently breaks multipart uploads.
 - When verification runs through `sudo`, test service IDs must come from the
   workspace owner so the restored model cache stays readable and writable.
+- Archive reconciliation must project completed job rows for existing transcripts;
+  otherwise startup repair queues the entire recovered audio archive again.
+- App availability must depend only on the transcriber process starting. Model
+  readiness may lag or fail without blocking capture, playback, search, or upload.
 - Babysit mounts `/workspace/node_modules` from a separate volume. Sibling Docker
   containers must build lockfile-coupled dependencies instead of bind-mounting the
   host workspace's `node_modules` path.

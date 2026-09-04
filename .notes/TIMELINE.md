@@ -39,3 +39,6 @@
   five-minute header timeouts while the healthy CPU transcriber was still working.
   Recovery, durable retry, explicit per-recording location/transcription state, and
   readiness-aware deployment gates were implemented and passed the full verifier.
+- 2026-09-04 — Post-commit independent review prevented archive-wide reprocessing
+  after database recovery and kept the app available during model startup. It also
+  removed deleted recording ghosts and hardened timeout and release diagnostics.

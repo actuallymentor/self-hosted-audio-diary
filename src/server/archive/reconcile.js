@@ -112,13 +112,17 @@ export async function reconcile_archive( runtime ) {
                         id: profile.user_id,
                     }, local_date, item )
 
-                    if( item.type === `audio` && !item.transcript ) {
-                        runtime.jobs.enqueue( runtime, {
+                    if( item.type === `audio` ) {
+                        const job_id = runtime.jobs.enqueue( runtime, {
                             dedupe_key: `${ item.id }:${ item.sha256 }`,
                             payload: { item_id: item.id },
                             type: `transcription`,
                             user_id: profile.user_id,
                         } )
+
+                        // Archive transcript metadata is canonical proof that
+                        // recovered operational state should already be complete.
+                        if( item.transcript ) runtime.jobs.finish( runtime, { id: job_id } )
                     }
 
                     report.items += 1

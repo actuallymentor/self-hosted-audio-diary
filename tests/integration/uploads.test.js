@@ -6,6 +6,8 @@ import path from "node:path"
 import test from "node:test"
 import { promisify } from "node:util"
 
+import { reconcile_archive } from "../../src/server/archive/reconcile.js"
+import { create_runtime } from "../../src/server/runtime/create_runtime.js"
 import { bootstrap_client, start_test_server } from "../support/test_server.js"
 
 const execute_file = promisify( execFile )
@@ -166,6 +168,23 @@ test( `resumes immutable chunks, finalizes media, and serves byte ranges`, async
     const complete_day = await client.request( `/api/v1/days/2026-08-25` )
 
     assert.equal( complete_day.result.items[0].recording_status.transcription, `complete` )
+
+    const recovered_app = path.join( server.root, `recovered-app` )
+    const recovered_runtime = create_runtime( {
+        ...server.config,
+        APP_DATA_PATH: recovered_app,
+        app_data_path: recovered_app,
+        database_path: path.join( recovered_app, `shad.sqlite` ),
+    } )
+
+    t.after( () => recovered_runtime.database.close() )
+    await reconcile_archive( recovered_runtime )
+
+    assert.deepEqual(
+        recovered_runtime.database.prepare( `SELECT status, attempts FROM jobs` ).get(),
+        { attempts: 0, status: `complete` },
+    )
+    assert.equal( recovered_runtime.jobs.repair_missing_transcriptions( recovered_runtime ), 0 )
 } )
 
 test( `expires only stale incomplete staging and retains client-retry semantics`, async t => {

@@ -59,7 +59,7 @@ services:
       retries: 6
     depends_on:
       transcriber:
-        condition: service_healthy
+        condition: service_started
 
   transcriber:
     image: actuallymentor/self-hosted-audio-diary-transcriber:0.3.0

@@ -9,14 +9,16 @@
 
 ### Changed
 
-- Gate startup and published-image checks on transcription readiness.
+- Gate transcriber health and published-image checks on model readiness.
 
 ### Fixed
 
 - Allow slow CPU transcription to exceed five minutes and survive outages.
 - Recover failed or missing jobs during upgrades and archive reconstruction.
+- Preserve completed transcript state during archive-only database recovery.
 - Finalize uploads and enqueue transcription in one database transaction.
 - Preserve model-cache ownership in verification and release checks.
+- Keep capture and search available while the transcription model starts.
 - Log inference failures with their server-side exception details.
 
 ## [0.2.0] - 2026-08-28
