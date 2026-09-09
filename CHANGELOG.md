@@ -14,6 +14,7 @@
 - Simplify Today to recording and a + menu for notes, photos, and video.
 - Move the timeline to Calendar and account identity to Settings.
 - Quiet recorder visuals and constrain reflection text to 65ch.
+- Allow verified image publication from SSH-pushed version tags.
 
 ### Fixed
 

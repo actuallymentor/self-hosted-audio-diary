@@ -10,12 +10,15 @@
 - Images: `actuallymentor/self-hosted-audio-diary:latest` and
   `actuallymentor/self-hosted-audio-diary-transcriber:latest`.
 - Observed version before the 2026-09-09 UX deployment: `0.3.0`.
-- No published app port. Public URL has not been verified in this session.
+- Public URL: https://diary.mylentor.life (SWAG reverse proxy).
+- External `/version` and `/health/ready` returned 200 before deployment.
+- No directly published app port.
 - Inspect version/readiness inside `audio-diary` at
   `http://127.0.0.1:3000/version` and `/health/ready` using `docker exec`.
 - App state: `/mnt/internalnvme/audio-diary/app` on host.
 - Diary archive: `/mnt/raidbox/audio-diary/diary` on host.
-- Publish through the GitHub Actions release workflow; confirm CI, release jobs,
+- Publish through the GitHub Actions release workflow using an SSH-pushed version
+  tag or a published GitHub release. Confirm CI, release jobs,
   registry validation, and running-service version before claiming deployment.
 
 ## Local verification

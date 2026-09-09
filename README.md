@@ -246,3 +246,17 @@ docker compose logs --tail=200 transcriber
 - Login loops behind HTTPS: set `SESSION_COOKIE_SECURE=true` and restart `app`.
 - Reflection or speech unavailable: verify `OPENROUTER_API_KEY`; diary capture and
   local transcription remain available.
+
+## Maintainer releases
+
+After main CI passes, push a version tag over SSH:
+
+```bash
+version=$(node -p "require('./package.json').version")
+git tag "v$version"
+git push origin "v$version"
+```
+
+The release workflow verifies two clean Docker runs, publishes both architectures,
+and validates registry-pulled images. Publishing a GitHub release also triggers
+this workflow; use either route once per version.

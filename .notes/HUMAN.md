@@ -39,10 +39,10 @@
   rendered the ignored local `.env` into the agent execution log. The key was
   never committed or included in a release artifact.
 
-## 2026-09-09 — publication credential
+## 2026-09-09 — release access resolved
 
-- UX implementation and deployment are authorized. The repository SSH deploy key
-  works, but this agent container has no GitHub API login or token. Publishing the
-  GitHub release needs `gh auth login` or `GH_TOKEN` in ignored `.env.local`.
-- Public Actions status can be checked without API authentication. Do not confuse
-  passing CI or locally built images with a completed production deployment.
+- Deployment is authorized. Version-tag pushes over the existing SSH deploy key
+  now trigger the same verified image-release workflow; a GitHub API token is not
+  needed to publish images or inspect public Actions results.
+- Do not confuse passing CI or locally built images with completed deployment;
+  verify published images and the running production version.

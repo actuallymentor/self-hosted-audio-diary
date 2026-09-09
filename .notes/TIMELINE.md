@@ -73,3 +73,7 @@
 - 2026-09-09 — Review regressions passed in Docker Chrome: late microphone
   permission leaves no row or live tracks; video chunking exposes local-save
   feedback; delayed wake-lock startup and offline capture remain intact.
+- 2026-09-09 — GitHub API authentication is absent in the agent and Docker host.
+  Added an SSH version-tag trigger to the existing release workflow, preserving
+  all verification/publishing gates and removing that deployment dependency.
+  Confirmed production HTTPS route and healthy 0.3.0 baseline.
