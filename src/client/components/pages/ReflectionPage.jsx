@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown"
 import toast from "react-hot-toast"
 import styled from "styled-components"
 
+import { reflection_range } from "../../../shared/diary_dates.js"
 import { api } from "../../modules/api/client.js"
 import { current_capture } from "../../modules/recorder/recorder.js"
 import { Button } from "../atoms/Button.jsx"
@@ -15,7 +16,8 @@ const Form = styled.form`
   gap: .8rem;
   padding: 1rem;
 
-  div { display: grid; gap: .7rem; grid-template-columns: 1fr 1fr; }
+  label { display: grid; gap: .4rem; min-width: 0; }
+  div { display: grid; gap: .7rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); }
 `
 
 const Reflection = styled.article`
@@ -23,15 +25,10 @@ const Reflection = styled.article`
   border: 1px solid var(--border);
   border-radius: 1rem;
   margin: 1rem 0;
-  max-width: 75ch;
+  max-width: 65ch;
+  overflow-wrap: anywhere;
   padding: 1.25rem;
 `
-
-function week_ago() {
-    const value = new Date()
-    value.setDate( value.getDate() - 7 )
-    return value.toISOString().slice( 0, 10 )
-}
 
 /**
  * Ask grounded questions across a complete selected diary range.
@@ -41,6 +38,10 @@ function week_ago() {
 export default function ReflectionPage() {
     const [ reflections, set_reflections ] = useState( [] )
     const [ busy, set_busy ] = useState( false )
+    const [ period, set_period ] = useState( `week` )
+    const today = current_capture().local_date
+    const [ custom_range, set_custom_range ] = useState( () => reflection_range( `week`, today ) )
+    const range = period === `custom` ? custom_range : reflection_range( period, today )
 
     async function refresh() {
         const response = await api( `/reflections` )
@@ -48,11 +49,16 @@ export default function ReflectionPage() {
     }
 
     useEffect( () => {
-        void refresh()
+        void refresh().catch( error => toast.error( error.message ) )
     }, [] )
 
     async function submit( event ) {
         event.preventDefault()
+        if( !range.range_start || !range.range_end || range.range_start > range.range_end || range.range_end > today ) {
+            toast.error( `Choose a valid date range ending no later than today` )
+            return
+        }
+
         set_busy( true )
 
         const form = new FormData( event.currentTarget )
@@ -61,8 +67,7 @@ export default function ReflectionPage() {
             await api( `/reflections`, {
                 json: {
                     question: form.get( `question` ),
-                    range_end: form.get( `range_end` ),
-                    range_start: form.get( `range_start` ),
+                    ...range,
                 },
                 method: `POST`,
             } )
@@ -90,10 +95,25 @@ export default function ReflectionPage() {
         <p>Selected diary text is sent to your configured OpenRouter model. Zero-data-retention routing is requested.</p>
         <Form onSubmit={ submit }>
             <label>Question<textarea name="question" placeholder="What gave me energy this week?" required /></label>
-            <div>
-                <label>From<input defaultValue={ week_ago() } name="range_start" required type="date" /></label>
-                <label>To<input defaultValue={ current_capture().local_date } name="range_end" required type="date" /></label>
-            </div>
+            <label>Period
+                <select name="period" onChange={ event => set_period( event.target.value ) } value={ period }>
+                    <option value="week">Week</option>
+                    <option value="month">Month</option>
+                    <option value="quarter">Quarter</option>
+                    <option value="year">Year</option>
+                    <option value="custom">Custom</option>
+                </select>
+            </label>
+            { period === `custom` ? <div>
+                <label>From<input max={ custom_range.range_end || today } name="range_start"
+                    onChange={ event => set_custom_range( { ...custom_range, range_start: event.target.value } ) }
+                    required type="date" value={ custom_range.range_start }
+                /></label>
+                <label>To<input max={ today } min={ custom_range.range_start } name="range_end"
+                    onChange={ event => set_custom_range( { ...custom_range, range_end: event.target.value } ) }
+                    required type="date" value={ custom_range.range_end }
+                /></label>
+            </div> : <small aria-live="polite">{ range.range_start } — { range.range_end } · including today</small> }
             <Button disabled={ busy } primary type="submit">{ busy ? `Reflecting…` : `Start reflection` }</Button>
         </Form>
         <section aria-label="Reflection history">

@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.4.0] - 2026-09-09
+
+### Added
+
+- Add Calendar day arrows, Today shortcut, and day-tag editing.
+- Add Week, Month, Quarter, Year, and Custom reflection periods.
+- Show saved reading values, default ticks, resets, and a live preview.
+- Add text-size controls and mobile hamburger navigation.
+
+### Changed
+
+- Simplify Today to recording and a + menu for notes, photos, and video.
+- Move the timeline to Calendar and account identity to Settings.
+- Quiet recorder visuals and constrain reflection text to 65ch.
+
+### Fixed
+
+- Restore reading sliders from saved preferences.
+- Stop and save active recordings when leaving the capture page.
+
 ## [0.3.0] - 2026-09-04
 
 ### Added

@@ -56,3 +56,14 @@
 - 2026-09-04 — The first pushed CI run passed quality and both native architectures,
   then exposed a clean-cache preflight exit and hidden-artifact omission. Both
   deployment diagnostics were corrected before release.
+- 2026-09-09 — Approved a capture-only home, Calendar day arrows and tags,
+  trailing reflection presets, numeric reading controls, quieter visuals, mobile
+  hamburger navigation, and reading preview. Local Docker verification precedes
+  publication and deployment; GitHub Actions must complete successfully.
+- 2026-09-09 — First full Docker run passed 33 unit/integration tests, real Chrome
+  UX/offline recovery, service restart, live multilingual inference/reflection/TTS,
+  and archive reconstruction. Final verification adds a pending-startup navigation
+  regression; the first final run was interrupted by an agent-container restart.
+- 2026-09-09 — Final Chrome gate passed the startup/navigation race regression,
+  native photo/video uploads, calendar/tag editing, reflection presets, persisted
+  typography, keyboard navigation, enlarged text, and offline interruption recovery.

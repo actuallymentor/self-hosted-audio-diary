@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react"
+import React, { useEffect, useRef, useState } from "react"
 import { useLiveQuery } from "dexie-react-hooks"
 import toast from "react-hot-toast"
 import styled from "styled-components"
@@ -10,11 +10,7 @@ import { Button } from "../atoms/Button.jsx"
 import { Status } from "../atoms/Status.jsx"
 
 const Card = styled.section`
-  background: linear-gradient(150deg, #edf8fa, #fff);
-  border: 1px solid #bddde4;
-  border-radius: 1.5rem;
-  box-shadow: var(--shadow);
-  padding: clamp(1.25rem, 5vw, 2.5rem);
+  padding: clamp(2rem, 8vh, 5rem) 0;
   text-align: center;
 `
 
@@ -23,15 +19,14 @@ const Record = styled.button`
   background: ${ ( { $recording } ) => $recording ? `#a82c3c` : `var(--accent)` };
   border: 0;
   border-radius: 50%;
-  box-shadow: 0 8px 22px rgb(57 124 141 / 28%);
   color: white;
   display: inline-flex;
   font-family: "Montserrat Variable", sans-serif;
   font-size: 1.2rem;
-  height: 9rem;
+  min-height: 9rem;
   justify-content: center;
   margin: 1rem;
-  width: 9rem;
+  min-width: 9rem;
 `
 
 const Secondary = styled.div`
@@ -42,7 +37,15 @@ const Secondary = styled.div`
   margin-top: 1rem;
 `
 
-const HiddenInput = styled.input`position: absolute; height: 1px; width: 1px; opacity: 0;`
+const More = styled( Button )`
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+  font-size: 1.5rem;
+  margin-top: 1rem;
+`
+
+const HiddenInput = styled.input`display: none;`
 
 /**
  * Provide the dominant native microphone action plus secondary media capture.
@@ -50,10 +53,15 @@ const HiddenInput = styled.input`position: absolute; height: 1px; width: 1px; op
  * @param {object} props
  * @returns {React.ReactElement}
  */
-export function RecorderCard( { account_id, on_saved } ) {
+export function RecorderCard( { account_id, on_note } ) {
     const [ state, set_state ] = useState( `idle` )
     const [ recording_id, set_recording_id ] = useState( null )
+    const [ expanded, set_expanded ] = useState( false )
+    const [ busy, set_busy ] = useState( false )
+    const more_button = useRef( null )
+    const mounted = useRef( true )
     const recorder = useRef( null )
+    const starting = useRef( false )
     const photo_input = useRef( null )
     const video_input = useRef( null )
     const saved_recording = useLiveQuery(
@@ -62,8 +70,37 @@ export function RecorderCard( { account_id, on_saved } ) {
         null,
     )
     const visible_state = saved_recording?.status ?? state
+    const recording = visible_state === `recording`
+    const button_label = busy ? state === `recording` ? `Saving…` : `Starting…` : recording ? `Stop` : `Record`
+
+    useEffect( () => {
+        mounted.current = true
+
+        const protect_capture = event => {
+            if( recorder.current?.recorder?.state !== `recording` ) return
+
+            event.preventDefault()
+            event.returnValue = ``
+        }
+
+        window.addEventListener( `beforeunload`, protect_capture )
+
+        return () => {
+            mounted.current = false
+            window.removeEventListener( `beforeunload`, protect_capture )
+
+            // Let pending startup finish its wake-lock setup before stopping capture.
+            if( !starting.current && recorder.current?.recorder?.state === `recording` ) {
+                void recorder.current.stop().catch( error => toast.error( error.message ) )
+            }
+        }
+    }, [] )
 
     async function toggle_recording() {
+        if( busy ) return
+
+        set_busy( true )
+
         try {
             if( state === `recording` ) {
                 await recorder.current.stop()
@@ -75,14 +112,22 @@ export function RecorderCard( { account_id, on_saved } ) {
                 set_recording_id( next.id )
 
                 if( next.status === `saved_local` ) {
-                    toast.success( `Recording saved on this device` )
-                    void sync_outbox( account_id ).then( on_saved )
+                    toast.success( mounted.current ? `Recording saved on this device` : `Recording stopped and saved on this device` )
+                    void sync_outbox( account_id )
                 }
             } )
+            starting.current = true
             await recorder.current.start()
+            starting.current = false
+
+            // Permission and wake-lock requests can finish after leaving this page.
+            if( !mounted.current ) await recorder.current.stop()
         } catch ( error ) {
             set_state( `idle` )
             toast.error( error.message ?? `Microphone could not start` )
+        } finally {
+            starting.current = false
+            set_busy( false )
         }
     }
 
@@ -94,7 +139,7 @@ export function RecorderCard( { account_id, on_saved } ) {
         try {
             await queue_media_file( account_id, file, item_type )
             toast.success( `${ item_type === `image` ? `Photo` : `Video` } saved on this device` )
-            void sync_outbox( account_id ).then( on_saved )
+            void sync_outbox( account_id )
         } catch ( error ) {
             toast.error( error.message ?? `Media could not be saved` )
         } finally {
@@ -102,20 +147,48 @@ export function RecorderCard( { account_id, on_saved } ) {
         }
     }
 
-    return <Card aria-labelledby="record-heading">
-        <h2 id="record-heading">What happened?</h2>
-        <p>Your audio is saved here before it syncs.</p>
+    function close_options() {
+        set_expanded( false )
+        more_button.current?.focus()
+    }
+
+    function write_note() {
+        close_options()
+        on_note()
+    }
+
+    function choose_media( input ) {
+        close_options()
+        input.current.click()
+    }
+
+    return <Card aria-label="Capture a diary entry" onKeyDown={ event => {
+        if( event.key === `Escape` && expanded ) close_options()
+    } }
+    >
         <Record
-            $recording={ visible_state === `recording` }
-            aria-pressed={ visible_state === `recording` }
+            $recording={ recording }
+            aria-pressed={ recording }
+            disabled={ busy }
             onClick={ toggle_recording }
             type="button"
-        >{ visible_state === `recording` ? `Stop` : `Record` }</Record>
-        { visible_state !== `idle` && <div><Status value={ visible_state } /></div> }
-        <Secondary>
-            <Button onClick={ () => photo_input.current.click() }>Add photo</Button>
-            <Button onClick={ () => video_input.current.click() }>Add video</Button>
-        </Secondary>
+        >{ button_label }</Record>
+        { ![ `idle`, `uploaded` ].includes( visible_state ) && <div aria-live="polite"><Status value={ visible_state } /></div> }
+        <div>
+            <More
+                ref={ more_button }
+                aria-controls="capture-options"
+                aria-expanded={ expanded }
+                aria-label="Add entry"
+                onClick={ () => set_expanded( !expanded ) }
+                type="button"
+            >{ expanded ? `−` : `+` }</More>
+        </div>
+        { expanded && <Secondary id="capture-options">
+            <Button onClick={ write_note } type="button">Note</Button>
+            <Button onClick={ () => choose_media( photo_input ) } type="button">Photo</Button>
+            <Button onClick={ () => choose_media( video_input ) } type="button">Video</Button>
+        </Secondary> }
         <HiddenInput
             ref={ photo_input }
             accept="image/*"

@@ -4,7 +4,7 @@ Private voice journaling with offline recording, resumable uploads, local
 multilingual transcription, search, reflections, and ordinary files you can back
 up without SHAD.
 
-Status: `0.3.0` preview. Images support `linux/amd64` and `linux/arm64`. Physical
+Status: `0.4.0` preview. Images support `linux/amd64` and `linux/arm64`. Physical
 iPhone and Android validation remains required before `1.0.0`.
 
 ## Requirements
@@ -26,7 +26,7 @@ name: shad
 
 services:
   app:
-    image: actuallymentor/self-hosted-audio-diary:0.3.0
+    image: actuallymentor/self-hosted-audio-diary:0.4.0
     restart: unless-stopped
     init: true
     ports:
@@ -62,7 +62,7 @@ services:
         condition: service_started
 
   transcriber:
-    image: actuallymentor/self-hosted-audio-diary-transcriber:0.3.0
+    image: actuallymentor/self-hosted-audio-diary-transcriber:0.4.0
     restart: unless-stopped
     init: true
     environment:
@@ -127,9 +127,15 @@ Settings.
 
 - Press Record, speak, then stop. Every audio row shows whether its bytes are on
   this device, on the server, queued, transcribing, complete, or failed.
-- Add text, images, or video to the same day.
+- Use **+** on Today for a note, photo, or video. Leaving Today stops and saves an active recording.
+- Browse entries and edit day tags in Calendar; use the arrows or Today shortcut.
 - Search diary text, transcripts, and tags.
-- Create reflections across a date range. Speech requires `OPENROUTER_API_KEY`.
+- Reflect over Week (default), Month, Quarter, Year, or Custom. Presets include today;
+  Week covers seven days, longer periods use calendar months with month-end clamping.
+  The displayed dates are the exact inclusive range. Speech requires `OPENROUTER_API_KEY`.
+- Adjust reading size and spacing in Settings with live values, default markers,
+  resets, and a reading preview. Preferences persist on this browser.
+- Open Menu on mobile; desktop navigation stays visible at the top.
 - Install the PWA from its in-app Install button or browser menu.
 
 Recordings survive offline use, reloads, and interrupted uploads. Valid local

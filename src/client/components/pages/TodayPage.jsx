@@ -1,9 +1,8 @@
-import React, { useCallback, useEffect, useRef, useState } from "react"
+import React, { useEffect, useState } from "react"
 import { useLiveQuery } from "dexie-react-hooks"
 import toast from "react-hot-toast"
 import styled from "styled-components"
 
-import { api } from "../../modules/api/client.js"
 import { current_capture } from "../../modules/recorder/recorder.js"
 import { list_local_recordings } from "../../modules/storage/database.js"
 import { queue_text, sync_outbox } from "../../modules/sync/outbox.js"
@@ -11,14 +10,6 @@ import { use_session } from "../../stores/session.js"
 import { Button } from "../atoms/Button.jsx"
 import { Status } from "../atoms/Status.jsx"
 import { RecorderCard } from "../molecules/RecorderCard.jsx"
-import { Timeline } from "../molecules/Timeline.jsx"
-
-const Heading = styled.div`
-  align-items: end;
-  display: flex;
-  justify-content: space-between;
-  margin-top: 2rem;
-`
 
 const TextForm = styled.form`
   background: var(--surface);
@@ -63,16 +54,6 @@ const UploadBar = styled.progress`
   width: 100%;
 `
 
-const TagForm = styled.form`
-  align-items: end;
-  display: grid;
-  gap: .75rem;
-  grid-template-columns: 1fr auto;
-  margin: 1rem 0;
-
-  label { display: grid; gap: .35rem; }
-`
-
 function upload_name( recording ) {
     if( recording.item_type === `image` ) return `photo`
     if( recording.item_type === `video` ) return `video`
@@ -106,18 +87,14 @@ function UploadProgress( { recording } ) {
 }
 
 /**
- * Render the one-hand capture surface and today's canonical timeline.
+ * Render the minimal capture surface and relevant device outbox status.
  *
  * @returns {React.ReactElement}
  */
 export function TodayPage() {
     const user = use_session( state => state.user )
-    const { local_date } = current_capture()
-    const [ day, set_day ] = useState( { items: [], tags: [] } )
-    const [ loading, set_loading ] = useState( true )
-    const [ remote_loaded, set_remote_loaded ] = useState( false )
-    const [ remote_unavailable, set_remote_unavailable ] = useState( false )
-    const refresh_generation = useRef( 0 )
+    const [ writing, set_writing ] = useState( false )
+    const [ saving, set_saving ] = useState( false )
     const local_recordings = useLiveQuery(
         () => list_local_recordings( user.id ),
         [ user.id ],
@@ -125,60 +102,12 @@ export function TodayPage() {
     )
     const pending = local_recordings.filter( recording => recording.status !== `uploaded` )
     const uploading = pending.filter( recording => recording.status === `syncing` )
-    const outbox = pending.filter( recording => recording.status !== `syncing` )
-    const day_recordings = local_recordings.filter( recording =>
-        recording.capture.local_date === local_date
-    )
+    const outbox = pending.filter( recording => ![ `syncing`, `recording` ].includes( recording.status ) )
 
-    const refresh = useCallback( async ( { invalidate = false, quiet = false } = {} ) => {
-        const generation = refresh_generation.current + 1
-
-        refresh_generation.current = generation
-        if( invalidate ) {
-            set_remote_loaded( false )
-            set_remote_unavailable( false )
-        }
-
-        try {
-            const next = await api( `/days/${ local_date }` )
-
-            if( refresh_generation.current !== generation ) return
-
-            set_day( next )
-            set_remote_loaded( true )
-            set_remote_unavailable( false )
-        } catch ( error ) {
-            if( refresh_generation.current !== generation ) return
-
-            set_remote_loaded( false )
-            set_remote_unavailable( true )
-            if( !quiet && navigator.onLine ) toast.error( error.message )
-        } finally {
-            if( refresh_generation.current === generation ) set_loading( false )
-        }
-    }, [ local_date ] )
 
     useEffect( () => {
-        void refresh()
         void sync_outbox( user.id )
-
-        const synchronized = () => void refresh( { invalidate: true, quiet: true } )
-
-        window.addEventListener( `shad:synchronized`, synchronized )
-        return () => window.removeEventListener( `shad:synchronized`, synchronized )
-    }, [ refresh, user.id ] )
-
-    useEffect( () => {
-        const waiting = day.items.some( item =>
-            [ `queued`, `transcribing` ].includes( item.recording_status?.transcription )
-        )
-
-        if( !waiting ) return undefined
-
-        const timer = setInterval( () => void refresh( { quiet: true } ), 5_000 )
-
-        return () => clearInterval( timer )
-    }, [ day.items, refresh ] )
+    }, [ user.id ] )
 
     async function save_text( event ) {
         event.preventDefault()
@@ -187,35 +116,26 @@ export function TodayPage() {
 
         if( !text ) return
 
-        await queue_text( user.id, {
-            capture: current_capture(),
-            item_id: crypto.randomUUID(),
-            operation_id: crypto.randomUUID(),
-            text,
-        } )
-        textarea.value = ``
-        toast.success( `Note saved on this device` )
-        setTimeout( () => void refresh(), 500 )
-    }
-
-    async function save_tags( event ) {
-        event.preventDefault()
-        const tags = event.currentTarget.elements.tags.value.split( `,` )
+        set_saving( true )
 
         try {
-            await api( `/days/${ local_date }/tags`, { json: { tags }, method: `PUT` } )
-            await refresh()
-            toast.success( `Tags saved` )
+            await queue_text( user.id, {
+                capture: current_capture(),
+                item_id: crypto.randomUUID(),
+                operation_id: crypto.randomUUID(),
+                text,
+            } )
+            set_writing( false )
+            toast.success( `Note saved on this device` )
         } catch ( error ) {
-            toast.error( error.message )
+            toast.error( error.message ?? `Note could not be saved` )
+        } finally {
+            set_saving( false )
         }
     }
 
     return <>
-        <RecorderCard
-            account_id={ user.id }
-            on_saved={ () => refresh( { invalidate: true, quiet: true } ) }
-        />
+        <RecorderCard account_id={ user.id } on_note={ () => set_writing( true ) } />
         { uploading.map( recording => <UploadProgress key={ recording.id } recording={ recording } /> ) }
         { outbox.length > 0 && <Pending aria-live="polite">
             <strong>Device outbox</strong>
@@ -224,29 +144,11 @@ export function TodayPage() {
                 { recording.status === `unrecoverable` && <> — { recording.last_error }</> }
             </p> ) }
         </Pending> }
-        <TextForm onSubmit={ save_text }>
+        { writing && <TextForm onSubmit={ save_text }>
             <label htmlFor="note"><strong>Write a note</strong></label>
-            <textarea id="note" name="note" placeholder="A detail worth remembering…" />
-            <Button type="submit">Save note</Button>
-        </TextForm>
-        <Heading>
-            <h2>Today</h2>
-            <time dateTime={ local_date }>{ new Date( `${ local_date }T12:00:00` ).toLocaleDateString( [], {
-                day: `numeric`, month: `long`, weekday: `long`,
-            } ) }</time>
-        </Heading>
-        <TagForm onSubmit={ save_tags }>
-            <label><strong>Day tags</strong>
-                <input defaultValue={ day.tags.join( `, ` ) } key={ day.tags.join( `|` ) } name="tags" placeholder="family, health, idea" />
-            </label>
-            <Button type="submit">Save tags</Button>
-        </TagForm>
-        { loading ? <p>Loading your day…</p> : <Timeline
-            items={ day.items }
-            local_recordings={ day_recordings }
-            on_changed={ refresh }
-            remote_loaded={ remote_loaded }
-            remote_unavailable={ remote_unavailable }
-        /> }
+            <textarea autoFocus id="note" name="note" placeholder="A detail worth remembering…" required />
+            <Button disabled={ saving } primary type="submit">{ saving ? `Saving…` : `Save note` }</Button>
+            <Button disabled={ saving } onClick={ () => set_writing( false ) } type="button">Cancel</Button>
+        </TextForm> }
     </>
 }

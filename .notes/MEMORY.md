@@ -6,3 +6,5 @@
   before changing Docker or end-to-end tests.
 - [`TIMELINE.md`](./TIMELINE.md) — major delivery checkpoints; load when resuming
   release or verification work.
+- [`DEPLOYMENTS.md`](./DEPLOYMENTS.md) — production service locations and local
+  verification lifecycle; load before deployment or production checks.
