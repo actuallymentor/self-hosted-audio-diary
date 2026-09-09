@@ -9,9 +9,15 @@
   complete configuration-file list before updating only these two services.
 - Images: `actuallymentor/self-hosted-audio-diary:latest` and
   `actuallymentor/self-hosted-audio-diary-transcriber:latest`.
-- Observed version before the 2026-09-09 UX deployment: `0.3.0`.
+- Deployed version: `0.4.0`, verified 2026-09-09; prior version `0.3.0`.
+- Source: tag `v0.4.0`, commit `b09225e`.
+- CI: https://github.com/actuallymentor/self-hosted-audio-diary/actions/runs/34340778213 — all four jobs passed.
+- Release: https://github.com/actuallymentor/self-hosted-audio-diary/actions/runs/34340808962 — verification, publication, and published-image validation passed.
 - Public URL: https://diary.mylentor.life (SWAG reverse proxy).
-- External `/version` and `/health/ready` returned 200 before deployment.
+- After deployment: both containers healthy; transcriber model ready; public
+  `/version` reports `0.4.0`, `/health/ready` reports `ok`. Real mobile Chrome
+  login-page smoke passed with no JavaScript errors or horizontal overflow.
+  Authenticated UX was exercised in isolated local Docker tests.
 - No directly published app port.
 - Inspect version/readiness inside `audio-diary` at
   `http://127.0.0.1:3000/version` and `/health/ready` using `docker exec`.

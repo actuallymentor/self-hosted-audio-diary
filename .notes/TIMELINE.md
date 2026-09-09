@@ -77,3 +77,6 @@
   Added an SSH version-tag trigger to the existing release workflow, preserving
   all verification/publishing gates and removing that deployment dependency.
   Confirmed production HTTPS route and healthy 0.3.0 baseline.
+- 2026-09-09 — Deployed verified `v0.4.0` images after all CI and release jobs
+  passed. Production app/transcriber are healthy, the speech model is ready, and
+  public HTTPS version/readiness plus mobile Chrome smoke passed.
