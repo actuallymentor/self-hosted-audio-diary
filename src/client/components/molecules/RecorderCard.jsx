@@ -57,7 +57,7 @@ export function RecorderCard( { account_id, on_note } ) {
     const [ state, set_state ] = useState( `idle` )
     const [ recording_id, set_recording_id ] = useState( null )
     const [ expanded, set_expanded ] = useState( false )
-    const [ busy, set_busy ] = useState( false )
+    const [ pending_action, set_pending_action ] = useState( null )
     const more_button = useRef( null )
     const mounted = useRef( true )
     const recorder = useRef( null )
@@ -71,7 +71,8 @@ export function RecorderCard( { account_id, on_note } ) {
     )
     const visible_state = saved_recording?.status ?? state
     const recording = visible_state === `recording`
-    const button_label = busy ? state === `recording` ? `Saving…` : `Starting…` : recording ? `Stop` : `Record`
+    const busy = Boolean( pending_action )
+    const button_label = pending_action ?? ( recording ? `Stop` : `Record` )
 
     useEffect( () => {
         mounted.current = true
@@ -91,7 +92,7 @@ export function RecorderCard( { account_id, on_note } ) {
 
             // Let pending startup finish its wake-lock setup before stopping capture.
             if( !starting.current && recorder.current?.recorder?.state === `recording` ) {
-                void recorder.current.stop().catch( error => toast.error( error.message ) )
+                void recorder.current.stop( { discard_empty: true } ).catch( error => toast.error( error.message ) )
             }
         }
     }, [] )
@@ -99,7 +100,7 @@ export function RecorderCard( { account_id, on_note } ) {
     async function toggle_recording() {
         if( busy ) return
 
-        set_busy( true )
+        set_pending_action( state === `recording` ? `Saving…` : `Starting…` )
 
         try {
             if( state === `recording` ) {
@@ -117,17 +118,17 @@ export function RecorderCard( { account_id, on_note } ) {
                 }
             } )
             starting.current = true
-            await recorder.current.start()
+            await recorder.current.start( () => mounted.current )
             starting.current = false
 
             // Permission and wake-lock requests can finish after leaving this page.
-            if( !mounted.current ) await recorder.current.stop()
+            if( !mounted.current ) await recorder.current.stop( { discard_empty: true } )
         } catch ( error ) {
             set_state( `idle` )
             toast.error( error.message ?? `Microphone could not start` )
         } finally {
             starting.current = false
-            set_busy( false )
+            set_pending_action( null )
         }
     }
 
@@ -173,7 +174,7 @@ export function RecorderCard( { account_id, on_note } ) {
             onClick={ toggle_recording }
             type="button"
         >{ button_label }</Record>
-        { ![ `idle`, `uploaded` ].includes( visible_state ) && <div aria-live="polite"><Status value={ visible_state } /></div> }
+        <div aria-live="polite">{ ![ `idle`, `uploaded` ].includes( visible_state ) && <Status value={ visible_state } /> }</div>
         <div>
             <More
                 ref={ more_button }

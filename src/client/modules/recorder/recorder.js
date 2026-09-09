@@ -114,9 +114,15 @@ export class DurableRecorder {
         }
     }
 
-    /** Start native microphone capture and an ordered persistence queue. */
-    async start() {
+    /** Start capture if the caller still needs it after microphone permission resolves. */
+    async start( should_start = () => true ) {
         const stream = await navigator.mediaDevices.getUserMedia( { audio: true } )
+
+        // Permission may resolve after the capture page has already been left.
+        if( !should_start() ) {
+            stream.getTracks().forEach( track => track.stop() )
+            return
+        }
 
         this.stream = stream
         this.recorder = new MediaRecorder( stream, {
@@ -197,13 +203,13 @@ export class DurableRecorder {
     }
 
     /** Stop only after the final recorder event and all IndexedDB writes complete. */
-    stop() {
-        this.stop_promise ??= this.finish_stop()
+    stop( { discard_empty = false } = {} ) {
+        this.stop_promise ??= this.finish_stop( discard_empty )
 
         return this.stop_promise
     }
 
-    async finish_stop() {
+    async finish_stop( discard_empty ) {
         if( !this.recorder ) return undefined
 
         try {
@@ -219,6 +225,14 @@ export class DurableRecorder {
             sensory_feedback( 420 )
 
             if( !this.byte_size ) {
+                // Navigation may cancel a just-started capture before any bytes exist.
+                // Preserve every nonempty capture, including failed persistence writes.
+                if( discard_empty ) {
+                    await diary_database.recordings.delete( this.id )
+                    this.on_state( { id: this.id, status: `idle` } )
+                    return this.id
+                }
+
                 await diary_database.recordings.update( this.id, {
                     last_error: `No audio bytes were saved before capture ended.`,
                     status: `unrecoverable`,

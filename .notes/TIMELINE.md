@@ -67,3 +67,9 @@
 - 2026-09-09 — Final Chrome gate passed the startup/navigation race regression,
   native photo/video uploads, calendar/tag editing, reflection presets, persisted
   typography, keyboard navigation, enlarged text, and offline interruption recovery.
+- 2026-09-09 — The resumed full verifier passed every gate. Independent review
+  then prompted late-permission cancellation, empty-capture cleanup, media-save
+  feedback, stable busy labels, and recording-announcement accessibility fixes.
+- 2026-09-09 — Review regressions passed in Docker Chrome: late microphone
+  permission leaves no row or live tracks; video chunking exposes local-save
+  feedback; delayed wake-lock startup and offline capture remain intact.

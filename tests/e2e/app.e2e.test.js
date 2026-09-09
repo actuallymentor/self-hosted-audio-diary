@@ -342,6 +342,53 @@ test( `real Chrome captures, syncs, searches, and relaunches offline`, {
     online_audio_count += 1
     mark( `navigation away from live recording finalized and synchronized capture` )
 
+    // A late microphone permission result must not create an orphaned recording.
+    await click_text( page, `a`, `Today` )
+    const count_local_recordings = () => page.evaluate( async () => {
+        const database = await new Promise( ( resolve, reject ) => {
+            const request = indexedDB.open( `shad_local` )
+            request.onsuccess = () => resolve( request.result )
+            request.onerror = () => reject( request.error )
+        } )
+        const count = await new Promise( ( resolve, reject ) => {
+            const request = database.transaction( `recordings`, `readonly` ).objectStore( `recordings` ).count()
+            request.onsuccess = () => resolve( request.result )
+            request.onerror = () => reject( request.error )
+        } )
+        database.close()
+        return count
+    } )
+    const recordings_before_permission = await count_local_recordings()
+    await page.evaluate( () => {
+        const devices = navigator.mediaDevices
+        const native_request = devices.getUserMedia
+        window.shad_permission_gate = {}
+        devices.getUserMedia = async function( ...args ) {
+            const stream = await native_request.apply( devices, args )
+            window.shad_permission_gate.stream = stream
+            await new Promise( resolve => {
+                window.shad_permission_gate.release = resolve
+            } )
+            return stream
+        }
+    } )
+    try {
+        await click_text( page, `button`, `Record` )
+        await page.waitForFunction( () => Boolean( window.shad_permission_gate.release ) )
+        assert.equal( await page.$$eval( `button`, elements => elements.some( element => element.textContent === `Starting…` && element.disabled ) ), true )
+        await click_text( page, `a`, `Calendar` )
+        await page.evaluate( () => window.shad_permission_gate.release() )
+        await page.waitForFunction( () => window.shad_permission_gate.stream.getTracks().every( track => track.readyState === `ended` ) )
+        assert.equal( await count_local_recordings(), recordings_before_permission )
+    } finally {
+        await page.evaluate( () => {
+            window.shad_permission_gate.release?.()
+            delete navigator.mediaDevices.getUserMedia
+            delete window.shad_permission_gate
+        } )
+    }
+    mark( `late microphone permission released real tracks without creating a recording` )
+
     // Delay only the native wake-lock promise to reproduce navigation during startup.
     await click_text( page, `a`, `Today` )
     await page.evaluate( () => {
@@ -412,12 +459,39 @@ test( `real Chrome captures, syncs, searches, and relaunches offline`, {
     } )
     await fs.writeFile( video_path, new Uint8Array( video_bytes ) )
 
-    for( const [ label, file ] of [ [ `Photo`, photo_path ], [ `Video`, video_path ] ] ) {
-        await page.click( `button[aria-label="Add entry"]` )
-        const [ chooser ] = await Promise.all( [ page.waitForFileChooser(), click_text( page, `button`, label ) ] )
-        await chooser.accept( [ file ] )
-        await page.waitForFunction( expected => document.body.textContent.includes( `${ expected } saved on this device` ), {}, label )
-        await wait_for_sync( page )
+    // Retain the real Blob read, delaying its result so local saving is observable.
+    await page.evaluate( () => {
+        const native_read = Blob.prototype.arrayBuffer
+        window.shad_video_gate = { native_read }
+        Blob.prototype.arrayBuffer = async function() {
+            const bytes = await native_read.call( this )
+            if( this.type.startsWith( `video/` ) && !window.shad_video_gate.release ) {
+                await new Promise( resolve => {
+                    window.shad_video_gate.release = resolve
+                } )
+            }
+            return bytes
+        }
+    } )
+    try {
+        for( const [ label, file ] of [ [ `Photo`, photo_path ], [ `Video`, video_path ] ] ) {
+            await page.click( `button[aria-label="Add entry"]` )
+            const [ chooser ] = await Promise.all( [ page.waitForFileChooser(), click_text( page, `button`, label ) ] )
+            await chooser.accept( [ file ] )
+            if( label === `Video` ) {
+                await page.waitForFunction( () => Boolean( window.shad_video_gate.release ) )
+                await page.waitForFunction( () => document.body.textContent.includes( `Saving video on this device…` ) )
+                await page.evaluate( () => window.shad_video_gate.release() )
+            }
+            await page.waitForFunction( expected => document.body.textContent.includes( `${ expected } saved on this device` ), {}, label )
+            await wait_for_sync( page )
+        }
+    } finally {
+        await page.evaluate( () => {
+            window.shad_video_gate.release?.()
+            Blob.prototype.arrayBuffer = window.shad_video_gate.native_read
+            delete window.shad_video_gate
+        } )
     }
     await click_text( page, `a`, `Calendar` )
     await page.waitForSelector( `video` )

@@ -102,8 +102,9 @@ export function TodayPage() {
     )
     const pending = local_recordings.filter( recording => recording.status !== `uploaded` )
     const uploading = pending.filter( recording => recording.status === `syncing` )
-    const outbox = pending.filter( recording => ![ `syncing`, `recording` ].includes( recording.status ) )
-
+    const outbox = pending.filter( recording => recording.status !== `syncing`
+        && ( recording.status !== `recording` || recording.item_type )
+    )
 
     useEffect( () => {
         void sync_outbox( user.id )
@@ -134,13 +135,15 @@ export function TodayPage() {
         }
     }
 
-    return <>
+    return <main>
         <RecorderCard account_id={ user.id } on_note={ () => set_writing( true ) } />
         { uploading.map( recording => <UploadProgress key={ recording.id } recording={ recording } /> ) }
         { outbox.length > 0 && <Pending aria-live="polite">
             <strong>Device outbox</strong>
             { outbox.map( recording => <p key={ recording.id }>
-                <Status value={ recording.status } />
+                { recording.item_type && recording.status === `recording`
+                    ? <span>Saving { upload_name( recording ) } on this device…</span>
+                    : <Status value={ recording.status } /> }
                 { recording.status === `unrecoverable` && <> — { recording.last_error }</> }
             </p> ) }
         </Pending> }
@@ -150,5 +153,5 @@ export function TodayPage() {
             <Button disabled={ saving } primary type="submit">{ saving ? `Saving…` : `Save note` }</Button>
             <Button disabled={ saving } onClick={ () => set_writing( false ) } type="button">Cancel</Button>
         </TextForm> }
-    </>
+    </main>
 }

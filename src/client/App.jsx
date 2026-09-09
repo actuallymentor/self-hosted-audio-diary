@@ -70,11 +70,11 @@ export function App() {
                         <Route path="*" element={ <AuthPage bootstrap_available={ bootstrap_available } /> } />
                     </> }
                     { user && <>
-                        <Route path="/" element={ <AppShell user={ user }><TodayPage /></AppShell> } />
-                        <Route path="/calendar" element={ <AppShell user={ user }><Suspense fallback={ <p>Opening…</p> }><CalendarPage /></Suspense></AppShell> } />
-                        <Route path="/search" element={ <AppShell user={ user }><Suspense fallback={ <p>Opening…</p> }><SearchPage /></Suspense></AppShell> } />
-                        <Route path="/reflection" element={ <AppShell user={ user }><Suspense fallback={ <p>Opening…</p> }><ReflectionPage /></Suspense></AppShell> } />
-                        <Route path="/settings" element={ <AppShell user={ user }><Suspense fallback={ <p>Opening…</p> }><SettingsPage /></Suspense></AppShell> } />
+                        <Route path="/" element={ <AppShell><TodayPage /></AppShell> } />
+                        <Route path="/calendar" element={ <AppShell><Suspense fallback={ <p>Opening…</p> }><CalendarPage /></Suspense></AppShell> } />
+                        <Route path="/search" element={ <AppShell><Suspense fallback={ <p>Opening…</p> }><SearchPage /></Suspense></AppShell> } />
+                        <Route path="/reflection" element={ <AppShell><Suspense fallback={ <p>Opening…</p> }><ReflectionPage /></Suspense></AppShell> } />
+                        <Route path="/settings" element={ <AppShell><Suspense fallback={ <p>Opening…</p> }><SettingsPage /></Suspense></AppShell> } />
                         <Route path="/register/:token" element={ <Navigate replace to="/" /> } />
                         <Route path="*" element={ <Navigate replace to="/" /> } />
                     </> }

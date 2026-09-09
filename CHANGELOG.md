@@ -19,6 +19,8 @@
 
 - Restore reading sliders from saved preferences.
 - Stop and save active recordings when leaving the capture page.
+- Cancel abandoned microphone startup without creating empty outbox errors.
+- Keep media-save feedback and recording announcements visible and accurate.
 
 ## [0.3.0] - 2026-09-04
 
