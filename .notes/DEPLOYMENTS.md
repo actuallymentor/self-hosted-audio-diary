@@ -27,6 +27,11 @@
   tag or a published GitHub release. Confirm CI, release jobs,
   registry validation, and running-service version before claiming deployment.
 
+- Deploy recipe (untested): sibling `docker:cli` container with the host Compose
+  directory bind-mounted read-only, project `docker-composition`, all label-listed
+  `-f` files; `pull` then `up -d --no-deps audio-diary audio-diary-transcriber`.
+  Transcriber restart reloads `large-v3` and spikes host CPU; ask before deploying.
+
 ## Local verification
 
 - `scripts/verify` creates isolated `shad-verify-*` Compose projects and
@@ -34,7 +39,3 @@
 - Agent restarts terminate the verifier process but can leave sibling test
   containers running. Remove only the interrupted verification project's services
   before starting a fresh run.
-- Deploy recipe (untested): sibling `docker:cli` container with the host Compose
-  directory bind-mounted read-only, project `docker-composition`, all label-listed
-  `-f` files; `pull` then `up -d --no-deps audio-diary audio-diary-transcriber`.
-  Transcriber restart reloads `large-v3` and spikes host CPU; ask before deploying.
