@@ -1,4 +1,4 @@
-import React, { useState } from "react"
+import React, { useEffect, useRef, useState } from "react"
 import { CloudOff, Pencil, RotateCcw, Trash2 } from "lucide-react"
 import toast from "react-hot-toast"
 import { Link } from "react-router-dom"
@@ -129,6 +129,12 @@ function EditModal( { item, on_close, on_saved, open } ) {
     const [ failed, set_failed ] = useState( null )
     const changed = text.trim() && text !== original
 
+    // A save finishing after this session ended must not close a newer one
+    const alive = useRef( true )
+    useEffect( () => () => {
+        alive.current = false
+    }, [] )
+
     async function save( event ) {
 
         event.preventDefault()
@@ -140,12 +146,12 @@ function EditModal( { item, on_close, on_saved, open } ) {
         try {
             await api( `/items/${ item.id }/text`, { json: { text }, method: `PATCH` } )
             await on_saved()
-            on_close()
             toast.success( `Text updated` )
+            if( alive.current ) on_close()
         } catch ( error ) {
-            set_failed( error.message ?? `The server did not accept the change.` )
+            if( alive.current ) set_failed( error.message ?? `The server did not accept the change.` )
         } finally {
-            set_saving( false )
+            if( alive.current ) set_saving( false )
         }
 
     }
@@ -153,7 +159,7 @@ function EditModal( { item, on_close, on_saved, open } ) {
     return <Modal on_close={ on_close } open={ open } title={ `Edit ${ item?.type === `text` ? `note` : `transcript` }` }>
         <form onSubmit={ save }>
             <label className="visually-hidden" htmlFor="edit-text">Text</label>
-            <textarea data-autofocus id="edit-text" onChange={ event => set_text( event.target.value ) } value={ text } />
+            <textarea data-autofocus id="edit-text" onChange={ event => set_text( event.target.value ) } readOnly={ saving } value={ text } />
             { failed && <Problem role="alert">Not saved. { as_sentence( failed ) } Your text is kept; try again.</Problem> }
             <ModalActions>
                 <Button disabled={ saving } onClick={ on_close }>Cancel</Button>
@@ -178,14 +184,13 @@ export function Timeline( {
     on_changed = () => {},
     remote_loaded = false,
     remote_unavailable = false,
-    on_retry,
 } ) {
     const timeline_items = merge_items( items, local_recordings, remote_loaded )
-    const [ editing, set_editing ] = useState( { open: false, item: null } )
+    const [ editing, set_editing ] = useState( { open: false, item: null, session: 0 } )
     const [ deleting, set_deleting ] = useState( { open: false, item: null } )
 
     if( !timeline_items.length ) return remote_unavailable
-        ? <EmptyState action={ on_retry && <Button icon={ RotateCcw } onClick={ on_retry }>Retry loading day</Button> } heading="This day could not be loaded" icon={ CloudOff }>
+        ? <EmptyState heading="This day could not be loaded" icon={ CloudOff }>
             Try again when the server is available.
         </EmptyState>
         : <EmptyState action={ <Link to="/">Record an entry</Link> } artwork heading="No entries yet">
@@ -249,7 +254,7 @@ export function Timeline( {
             { item.type === `audio` && item.recording_status?.transcription === `complete` && !item.display_transcript && <p className="quiet">No speech was detected.</p> }
             { item.local_recording?.status === `unrecoverable` && item.local_recording.last_error && <Problem>{ item.local_recording.last_error }</Problem> }
             <Actions>
-                { ( item.type === `text` || item.display_transcript ) && <IconAction icon={ Pencil } label="Edit text" onClick={ () => set_editing( { open: true, item } ) } /> }
+                { ( item.type === `text` || item.display_transcript ) && <IconAction icon={ Pencil } label="Edit text" onClick={ () => set_editing( current => ( { open: true, item, session: current.session + 1 } ) ) } /> }
                 { [ `failed`, `not_queued` ].includes( item.recording_status?.transcription ) && <IconAction icon={ RotateCcw } label="Retry transcription" onClick={ () => retry_transcription( item ) } /> }
                 { item.remote_present && <IconAction icon={ Trash2 } label="Delete" onClick={ () => set_deleting( { open: true, item } ) } tone="danger" /> }
             </Actions>
@@ -257,7 +262,7 @@ export function Timeline( {
 
         <EditModal
             item={ editing.item }
-            key={ editing.item?.id }
+            key={ editing.session }
             on_close={ () => set_editing( current => ( { ...current, open: false } ) ) }
             on_saved={ on_changed }
             open={ editing.open }

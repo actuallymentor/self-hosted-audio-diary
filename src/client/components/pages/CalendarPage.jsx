@@ -30,6 +30,10 @@ const Navigation = styled.div`
   .steps { display: flex; gap: .75rem; padding-bottom: .375rem; }
 `
 
+const Retry = styled.div`
+  margin-bottom: 1rem;
+`
+
 const Notice = styled.p`
   color: var(--warn-ink);
 `
@@ -167,11 +171,11 @@ export default function CalendarPage() {
         </Navigation>
         { !valid_date( requested_date ) && <Notice role="status">Invalid diary date. Showing today.</Notice> }
         { selected.loaded && <TagsEditor initial={ day.tags.join( `, ` ) } key={ date } on_save={ save_tags } /> }
+        { selected.unavailable && <Retry><Button icon={ RotateCcw } onClick={ retry }>Retry loading day</Button></Retry> }
         { !selected.settled ? <Skeleton label="Loading your day…" /> : <Timeline
             items={ day?.items ?? [] }
             local_recordings={ local_recordings }
             on_changed={ refresh }
-            on_retry={ retry }
             remote_loaded={ selected.loaded }
             remote_unavailable={ selected.unavailable }
         /> }

@@ -43,6 +43,12 @@ export const ModalActions = styled.div`
   margin-top: 1.5rem;
 `
 
+// Backdrop clicks target the dialog itself but land outside its box
+function outside( element, { clientX: x, clientY: y } ) {
+    const { bottom, left, right, top } = element.getBoundingClientRect()
+    return x < left || x > right || y < top || y > bottom
+}
+
 // Prefer a marked field over the first focusable (the close button); caret at the end
 function focus_preferred( dialog ) {
     const target = dialog.querySelector( `[data-autofocus]` )
@@ -102,7 +108,7 @@ export function Modal( { children, on_close, open, title } ) {
             event.preventDefault()
             on_close()
         } }
-        onClick={ event => event.target === dialog.current && on_close() }
+        onClick={ event => event.target === dialog.current && outside( dialog.current, event ) && on_close() }
         ref={ dialog }
     >
         <header>

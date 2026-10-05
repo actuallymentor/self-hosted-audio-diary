@@ -206,8 +206,8 @@ export const GlobalStyle = createGlobalStyle`
 
   /* Attention sheen: 3000ms start-to-start, 1400ms pass + 1600ms quiet */
   @keyframes shad-sheen {
-    0% { transform: translateX(-120%) skewX(-18deg); }
-    46.67%, 100% { transform: translateX(320%) skewX(-18deg); }
+    0% { background-position: 110% 0; }
+    46.67%, 100% { background-position: -10% 0; }
   }
 
   /* Forced colors drop decorative fills; keep the current page explicit */

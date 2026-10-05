@@ -44,6 +44,7 @@ export function IconAction( { icon: Icon, label, onClick, tone, ...properties } 
     const hold = useRef( { timer: null, x: 0, y: 0, swallow: false } )
 
     function press( event ) {
+        hold.current.swallow = false
         if( event.pointerType !== `touch` ) return
         hold.current.x = event.clientX
         hold.current.y = event.clientY

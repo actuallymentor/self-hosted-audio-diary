@@ -78,6 +78,8 @@ const TopNavigation = styled.nav`
   a.active { color: var(--ink); }
   a.active::after { transform: scaleX(1); }
 
+  @media (forced-colors: active) { a::after { background: Highlight; forced-color-adjust: none; } }
+
   @media (max-width: 47.99rem) { display: none; }
 `
 
@@ -116,6 +118,8 @@ const TabBar = styled.nav`
   a.active { color: var(--ink); }
   a.active::before { transform: scaleX(1); }
 
+  @media (forced-colors: active) { a::before { background: Highlight; forced-color-adjust: none; } }
+
   @media (min-width: 48rem) { display: none; }
 `
 
@@ -153,6 +157,7 @@ const MenuPanel = styled.div`
     width: 100%;
   }
 
+  button::before { inset: 0; }
   a:hover, button:hover:not(:disabled), a.active { background: var(--hover); transform: none; }
   svg { color: var(--muted); }
   hr { border: 0; border-top: 1px solid var(--border); margin: .35rem 0; width: 100%; }

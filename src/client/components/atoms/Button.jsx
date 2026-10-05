@@ -17,18 +17,18 @@ const quiet = css`
   &:hover:not(:disabled) { border-color: transparent; color: var(--ink); }
 `
 
-// Narrow sheen on the next important pending action
+// Narrow skewed sheen on the next important pending action.
+// Moves the gradient instead of an element, so no overflow clipping eats the hit area.
 const attention = css`
-  overflow: hidden;
-
   &::after {
     animation: shad-sheen 3000ms ease-in-out infinite;
-    background: linear-gradient(90deg, transparent, rgb(255 255 255 / 26%), transparent);
+    background: linear-gradient(108deg, transparent 41%, rgb(255 255 255 / 26%) 50%, transparent 59%) no-repeat;
+    background-size: 250% 100%;
+    border-radius: inherit;
     content: "";
-    inset: 0 auto 0 0;
+    inset: 0;
     pointer-events: none;
     position: absolute;
-    width: 45%;
   }
 `
 
