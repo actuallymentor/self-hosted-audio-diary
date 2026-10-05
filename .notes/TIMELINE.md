@@ -84,3 +84,6 @@
   light/dark themes, Lucide icons, pill buttons with 44px targets, bottom tabs plus
   top-right menu, native-dialog modals, tags save lifecycle, skeletons, empty states
   and Soundscape artwork. Unit/integration and full local e2e passed.
+- 2026-10-05 — Released `v0.5.0` (commit `a57e5ba`): main CI run 37346367241 and
+  release run 37347809239 passed; both 0.5.0 images are on Docker Hub. Production
+  deploy held at the owner's request (host CPU needed); prod still runs 0.4.0.
