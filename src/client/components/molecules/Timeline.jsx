@@ -131,8 +131,11 @@ function EditModal( { item, on_close, on_saved, open } ) {
 
     // A save finishing after this session ended must not close a newer one
     const alive = useRef( true )
-    useEffect( () => () => {
-        alive.current = false
+    useEffect( () => {
+        alive.current = true
+        return () => {
+            alive.current = false
+        }
     }, [] )
 
     async function save( event ) {
