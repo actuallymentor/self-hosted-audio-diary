@@ -31,7 +31,7 @@ COPY --from=dependencies /app/node_modules/better-sqlite3 ./node_modules/better-
 
 FROM node:24.19.0-bookworm-slim@sha256:a9f5f7c91a432850b2a8a7797adf5eadb6c733ceed61167806cee7ea7fbc29df AS runtime
 
-ARG APP_VERSION=0.4.0
+ARG APP_VERSION=0.5.0
 
 LABEL org.opencontainers.image.title="Self Hosted Audio Diary" \
     org.opencontainers.image.version="$APP_VERSION"

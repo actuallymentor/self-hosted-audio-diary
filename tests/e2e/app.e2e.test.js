@@ -14,6 +14,11 @@ function mark( value ) {
 }
 
 async function click_text( page, selector, text ) {
+    // Route changes render asynchronously; give the target a moment to appear
+    const find = ( selected, expected ) => [ ...document.querySelectorAll( selected ) ]
+        .some( candidate => candidate.textContent.trim() === expected )
+    await page.waitForFunction( find, { timeout: 5_000 }, selector, text ).catch( () => {} )
+
     const clicked = await page.evaluate( ( selected, expected ) => {
         const element = [ ...document.querySelectorAll( selected ) ]
             .find( candidate => candidate.textContent.trim() === expected )
@@ -23,6 +28,13 @@ async function click_text( page, selector, text ) {
     }, selector, text )
 
     assert.ok( clicked, `Expected ${ selector } with text ${ text }` )
+}
+
+// Let finite transitions (route crossfade, toasts) settle; mid-fade colors are transient
+async function settle_animations( page ) {
+    await page.waitForFunction( () => document.getAnimations().every( animation =>
+        animation.playState !== `running` || animation.effect?.getComputedTiming().iterations === Infinity
+    ) )
 }
 
 async function choose_date( page, date, selector = `input[type=date]` ) {
@@ -293,6 +305,9 @@ test( `real Chrome captures, syncs, searches, and relaunches offline`, {
     release_calendar_refresh()
     await choose_date( page, failed_date )
     await page.waitForFunction( () => document.body.textContent.includes( `This day could not be loaded` ) )
+    await page.waitForSelector( `dialog[open]` )
+    await click_text( page, `dialog[open] button`, `Close` )
+    await page.waitForFunction( () => !document.querySelector( `dialog[open]` ) )
     page.off( `request`, hold_calendar_request )
     await page.setRequestInterception( false )
     mark( `calendar date change distinguishes empty and unavailable state` )
@@ -323,6 +338,7 @@ test( `real Chrome captures, syncs, searches, and relaunches offline`, {
     }
     mark( `search result found` )
 
+    await settle_animations( page )
     const accessibility = await new AxePuppeteer( page ).analyze()
     const severe = accessibility.violations.filter( violation =>
         violation.impact === `critical` || violation.impact === `serious`
@@ -501,7 +517,7 @@ test( `real Chrome captures, syncs, searches, and relaunches offline`, {
     await page.waitForSelector( `input[name=tags]` )
     await page.type( `input[name=tags]`, `browser, calm` )
     await click_text( page, `button`, `Save tags` )
-    await page.waitForFunction( () => document.body.textContent.includes( `Tags saved` ) )
+    await page.waitForFunction( () => document.body.textContent.includes( `Changes saved` ) )
     await page.reload( { waitUntil: `networkidle0` } )
     assert.equal( await page.$eval( `input[name=tags]`, element => element.value ), `browser, calm` )
 
@@ -543,7 +559,8 @@ test( `real Chrome captures, syncs, searches, and relaunches offline`, {
     assert.equal( await page.$eval( `form`, element => element.checkValidity() ), false )
     mark( `reflection presets and custom date validation passed` )
 
-    await click_text( page, `a`, `Settings` )
+    await page.click( `button[aria-controls="app-menu"]` )
+    await click_text( page, `#app-menu a`, `Settings` )
     await page.waitForSelector( `#--font-scale` )
     assert.deepEqual( await page.$$eval( `output`, elements => elements.map( element => element.value ) ), [ `100%`, `1.55×`, `0.00em` ] )
     assert.equal( await page.$$eval( `input[type=range]`, elements => elements.every( element => document.getElementById( element.getAttribute( `aria-describedby` ) )?.textContent.startsWith( `Default` ) ) ), true )
@@ -560,23 +577,25 @@ test( `real Chrome captures, syncs, searches, and relaunches offline`, {
     assert.equal( await page.$eval( `#--font-scale`, element => element.value ), `100` )
 
     await page.setViewport( { width: 390, height: 844 } )
-    const menu = `button[aria-controls="primary-navigation"]`
+    const menu = `button[aria-controls="app-menu"]`
+    const tabs = `nav[aria-label="Primary navigation, mobile"]`
+    await page.waitForSelector( tabs, { visible: true } )
     await page.waitForSelector( menu, { visible: true } )
     assert.equal( await page.$eval( menu, element => element.getAttribute( `aria-expanded` ) ), `false` )
     await page.focus( menu )
     await page.keyboard.press( `Enter` )
     await page.keyboard.press( `Tab` )
-    assert.equal( await page.evaluate( () => document.activeElement.textContent ), `Today` )
+    assert.equal( await page.evaluate( () => document.activeElement.textContent ), `Settings` )
     await page.keyboard.press( `Escape` )
     assert.equal( await page.$eval( menu, element => element === document.activeElement ), true )
-    await page.click( menu )
-    await click_text( page, `a`, `Today` )
     assert.equal( await page.$eval( menu, element => element.getAttribute( `aria-expanded` ) ), `false` )
+    await click_text( page, `${ tabs } a`, `Today` )
+    await page.waitForSelector( `button[aria-label="Add entry"]` )
     assert.equal( await page.$( `textarea[name=note]` ), null )
     await fs.mkdir( `artifacts`, { recursive: true } )
     await page.screenshot( { path: `artifacts/home-mobile.png`, fullPage: true } )
     await page.click( menu )
-    await click_text( page, `a`, `Settings` )
+    await click_text( page, `#app-menu a`, `Settings` )
     await page.waitForSelector( `#--font-scale` )
     for( const selector of [ `#--font-scale`, `#--line-height`, `#--letter-spacing` ] ) {
         await page.focus( selector )
@@ -584,24 +603,25 @@ test( `real Chrome captures, syncs, searches, and relaunches offline`, {
     }
     assert.equal( await page.evaluate( () => document.documentElement.scrollWidth <= innerWidth ), true )
     await page.screenshot( { path: `artifacts/settings-mobile-large-text.png`, fullPage: true } )
+    await settle_animations( page )
     const settings_accessibility = await new AxePuppeteer( page ).analyze()
-    assert.deepEqual( settings_accessibility.violations.filter( violation => [ `critical`, `serious` ].includes( violation.impact ) ).map( violation => violation.id ), [] )
+    const settings_violations = settings_accessibility.violations.filter( violation => [ `critical`, `serious` ].includes( violation.impact ) )
+    assert.deepEqual( settings_violations.map( violation => violation.id ), [], JSON.stringify( settings_violations.map( violation => [ violation.id, violation.nodes.map( node => [ node.target, node.any[ 0 ]?.message ] ) ] ) ) )
     for( const label of [ `Calendar`, `Reflect` ] ) {
-        await page.click( menu )
-        await click_text( page, `a`, label )
+        await click_text( page, `${ tabs } a`, label )
         await page.waitForSelector( label === `Calendar` ? `input[type=date]` : `select[name=period]` )
         assert.equal( await page.evaluate( () => document.documentElement.scrollWidth <= innerWidth ), true, `${ label } fits mobile with maximum reading overrides` )
         await page.screenshot( { path: `artifacts/${ label.toLowerCase() }-mobile-large-text.png`, fullPage: true } )
     }
     await page.click( menu )
-    await click_text( page, `a`, `Settings` )
+    await click_text( page, `#app-menu a`, `Settings` )
     await page.waitForSelector( `#--font-scale` )
     for( const label of [ `text size`, `line spacing`, `letter spacing` ] ) {
         await page.click( `button[aria-label="Reset ${ label }"]` )
     }
     assert.deepEqual( await page.$$eval( `output`, elements => elements.map( element => element.value ) ), [ `100%`, `1.55×`, `0.00em` ] )
     await page.setViewport( { width: 1280, height: 900 } )
-    await page.waitForSelector( `#primary-navigation`, { visible: true } )
+    await page.waitForSelector( `nav[aria-label="Primary navigation"]`, { visible: true } )
     await page.screenshot( { path: `artifacts/settings-desktop.png`, fullPage: true } )
     mark( `reading controls persisted, defaults reset, mobile keyboard navigation and large text passed` )
 

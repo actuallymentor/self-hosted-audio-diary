@@ -1,33 +1,67 @@
-import React from "react"
+import React, { useState } from "react"
+import { CloudOff, Pencil, RotateCcw, Trash2 } from "lucide-react"
 import toast from "react-hot-toast"
+import { Link } from "react-router-dom"
 import styled from "styled-components"
 
 import { api } from "../../modules/api/client.js"
+import { as_sentence } from "../../modules/text.js"
+import { Button } from "../atoms/Button.jsx"
 import { Status } from "../atoms/Status.jsx"
+import { EmptyState } from "./EmptyState.jsx"
+import { IconAction } from "./IconAction.jsx"
+import { Modal, ModalActions } from "./Modal.jsx"
 
 const List = styled.ol`
+  display: grid;
+  gap: .75rem;
   list-style: none;
   margin: 0;
   padding: 0;
 `
 
 const Item = styled.li`
+  animation: shad-fade 320ms ease both;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 1rem;
-  margin: .8rem 0;
-  padding: 1rem;
+  border-radius: .75rem;
+  padding: 1rem 1.25rem;
 
-  audio, video, img { border-radius: .7rem; margin-top: .6rem; max-width: 100%; width: 100%; }
-  time { color: var(--muted); font-size: .82rem; }
-  p { max-width: 70ch; white-space: pre-wrap; }
+  /* Short, capped stagger for arriving items */
+  &:nth-child(2) { animation-delay: 40ms; }
+  &:nth-child(3) { animation-delay: 80ms; }
+  &:nth-child(n + 4) { animation-delay: 120ms; }
+
+  audio, video, img { border-radius: .5rem; display: block; margin-top: .75rem; max-width: 100%; width: 100%; }
+  time { color: var(--muted); font-size: .875rem; }
+  p { margin: .6rem 0 0; white-space: pre-wrap; }
+  .quiet { color: var(--muted); }
+`
+
+const Actions = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: .75rem;
+  margin-top: .75rem;
 `
 
 const RecordingStates = styled.div`
   display: flex;
   flex-wrap: wrap;
-  gap: .45rem;
-  margin-top: .65rem;
+  gap: .4rem;
+  margin-top: .6rem;
+`
+
+// Wide enough for every label, so the button never jumps
+const SaveButton = styled( Button )`
+  min-width: 8.5em;
+`
+
+const Problem = styled.p`
+  background: var(--danger-bg);
+  border-radius: .5rem;
+  color: var(--danger-ink);
+  padding: .6rem .8rem;
 `
 
 function merge_items( items, local_recordings, remote_loaded ) {
@@ -82,6 +116,57 @@ function local_sync_state( item ) {
 }
 
 /**
+ * Edit a note or transcript. A failed save keeps the text and offers retry.
+ *
+ * @param {object} props
+ * @returns {React.ReactElement}
+ */
+function EditModal( { item, on_close, on_saved, open } ) {
+
+    const original = ( item?.type === `text` ? item.text : item?.display_transcript ) ?? ``
+    const [ text, set_text ] = useState( original )
+    const [ saving, set_saving ] = useState( false )
+    const [ failed, set_failed ] = useState( null )
+    const changed = text.trim() && text !== original
+
+    async function save( event ) {
+
+        event.preventDefault()
+        if( !changed || saving ) return
+
+        set_saving( true )
+        set_failed( null )
+
+        try {
+            await api( `/items/${ item.id }/text`, { json: { text }, method: `PATCH` } )
+            await on_saved()
+            on_close()
+            toast.success( `Text updated` )
+        } catch ( error ) {
+            set_failed( error.message ?? `The server did not accept the change.` )
+        } finally {
+            set_saving( false )
+        }
+
+    }
+
+    return <Modal on_close={ on_close } open={ open } title={ `Edit ${ item?.type === `text` ? `note` : `transcript` }` }>
+        <form onSubmit={ save }>
+            <label className="visually-hidden" htmlFor="edit-text">Text</label>
+            <textarea data-autofocus id="edit-text" onChange={ event => set_text( event.target.value ) } value={ text } />
+            { failed && <Problem role="alert">Not saved. { as_sentence( failed ) } Your text is kept; try again.</Problem> }
+            <ModalActions>
+                <Button disabled={ saving } onClick={ on_close }>Cancel</Button>
+                <SaveButton busy={ saving } disabled={ !changed || saving } primary type="submit">
+                    { saving ? `Saving…` : failed ? `Try again` : `Save` }
+                </SaveButton>
+            </ModalActions>
+        </form>
+    </Modal>
+
+}
+
+/**
  * Render one chronological day using stable media IDs instead of archive paths.
  *
  * @param {object} props
@@ -93,30 +178,23 @@ export function Timeline( {
     on_changed = () => {},
     remote_loaded = false,
     remote_unavailable = false,
+    on_retry,
 } ) {
     const timeline_items = merge_items( items, local_recordings, remote_loaded )
-    const empty_message = remote_unavailable
-        ? `This day could not be loaded. Try again when the server is available.`
-        : `No entries yet. Your day can start with one thought.`
+    const [ editing, set_editing ] = useState( { open: false, item: null } )
+    const [ deleting, set_deleting ] = useState( { open: false, item: null } )
 
-    if( !timeline_items.length ) return <p>{ empty_message }</p>
-
-    async function edit( item ) {
-        const current = item.type === `text` ? item.text : item.display_transcript
-        const text = window.prompt( `Edit ${ item.type === `text` ? `note` : `transcript` }`, current ?? `` )
-
-        if( !text?.trim() ) return
-
-        try {
-            await api( `/items/${ item.id }/text`, { json: { text }, method: `PATCH` } )
-            await on_changed()
-        } catch ( error ) {
-            toast.error( error.message )
-        }
-    }
+    if( !timeline_items.length ) return remote_unavailable
+        ? <EmptyState action={ on_retry && <Button icon={ RotateCcw } onClick={ on_retry }>Retry loading day</Button> } heading="This day could not be loaded" icon={ CloudOff }>
+            Try again when the server is available.
+        </EmptyState>
+        : <EmptyState action={ <Link to="/">Record an entry</Link> } artwork heading="No entries yet">
+            Your day can start with one thought.
+        </EmptyState>
 
     async function remove( item ) {
-        if( !window.confirm( `Move this ${ item.type } entry to recoverable trash?` ) ) return
+
+        set_deleting( current => ( { ...current, open: false } ) )
 
         try {
             const removed = await api( `/items/${ item.id }`, { method: `DELETE` } )
@@ -150,8 +228,8 @@ export function Timeline( {
         }
     }
 
-    return <List>
-        { timeline_items.map( item => <Item id={ `item-${ item.id }` } key={ item.id }>
+    return <>
+        <List>{ timeline_items.map( item => <Item id={ `item-${ item.id }` } key={ item.id }>
             <time dateTime={ item.capture.utc }>
                 { new Date( item.capture.utc ).toLocaleTimeString( [], { hour: `2-digit`, minute: `2-digit` } ) }
             </time>
@@ -168,10 +246,29 @@ export function Timeline( {
             </a> }
             { item.type === `video` && <video controls preload="metadata" src={ `/api/v1/media/${ item.id }` } /> }
             { item.display_transcript && <p>{ item.display_transcript }</p> }
-            { item.type === `audio` && item.recording_status?.transcription === `complete` && !item.display_transcript && <p>No speech was detected.</p> }
-            { ( item.type === `text` || item.display_transcript ) && <button onClick={ () => edit( item ) } type="button">Edit text</button> }
-            { [ `failed`, `not_queued` ].includes( item.recording_status?.transcription ) && <button onClick={ () => retry_transcription( item ) } type="button">Retry transcription</button> }
-            { item.remote_present && <>{ ` ` }<button onClick={ () => remove( item ) } type="button">Delete</button></> }
-        </Item> ) }
-    </List>
+            { item.type === `audio` && item.recording_status?.transcription === `complete` && !item.display_transcript && <p className="quiet">No speech was detected.</p> }
+            { item.local_recording?.status === `unrecoverable` && item.local_recording.last_error && <Problem>{ item.local_recording.last_error }</Problem> }
+            <Actions>
+                { ( item.type === `text` || item.display_transcript ) && <IconAction icon={ Pencil } label="Edit text" onClick={ () => set_editing( { open: true, item } ) } /> }
+                { [ `failed`, `not_queued` ].includes( item.recording_status?.transcription ) && <IconAction icon={ RotateCcw } label="Retry transcription" onClick={ () => retry_transcription( item ) } /> }
+                { item.remote_present && <IconAction icon={ Trash2 } label="Delete" onClick={ () => set_deleting( { open: true, item } ) } tone="danger" /> }
+            </Actions>
+        </Item> ) }</List>
+
+        <EditModal
+            item={ editing.item }
+            key={ editing.item?.id }
+            on_close={ () => set_editing( current => ( { ...current, open: false } ) ) }
+            on_saved={ on_changed }
+            open={ editing.open }
+        />
+
+        <Modal on_close={ () => set_deleting( current => ( { ...current, open: false } ) ) } open={ deleting.open } title="Move entry to trash?">
+            <p>This { deleting.item?.type === `text` ? `note` : deleting.item?.type ?? `entry` } leaves your day and moves to recoverable trash. You can undo right after.</p>
+            <ModalActions>
+                <Button onClick={ () => set_deleting( current => ( { ...current, open: false } ) ) }>Cancel</Button>
+                <Button icon={ Trash2 } onClick={ () => remove( deleting.item ) } primary>Move to trash</Button>
+            </ModalActions>
+        </Modal>
+    </>
 }

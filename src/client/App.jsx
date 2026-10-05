@@ -9,8 +9,9 @@ import { prefetch } from "less-lazy"
 import { AuthPage } from "./components/pages/AuthPage.jsx"
 import { TodayPage } from "./components/pages/TodayPage.jsx"
 import { AppShell } from "./components/molecules/AppShell.jsx"
-import { InstallControls } from "./components/molecules/InstallControls.jsx"
+import { Skeleton } from "./components/atoms/Skeleton.jsx"
 import { sync_outbox } from "./modules/sync/outbox.js"
+import { use_pwa } from "./stores/pwa.js"
 import { use_session } from "./stores/session.js"
 import { GlobalStyle } from "./styles.js"
 
@@ -19,6 +20,18 @@ const CalendarPage = lazy( prefetch( () => import( "./components/pages/CalendarP
 const SearchPage = lazy( prefetch( () => import( "./components/pages/SearchPage.jsx" ) ) )
 const ReflectionPage = lazy( prefetch( () => import( "./components/pages/ReflectionPage.jsx" ) ) )
 const SettingsPage = lazy( prefetch( () => import( "./components/pages/SettingsPage.jsx" ) ) )
+
+// Toasts follow the theme tokens
+const toast_options = {
+    style: {
+        background: `var(--surface)`,
+        border: `1px solid var(--border)`,
+        borderRadius: `.75rem`,
+        boxShadow: `var(--shadow)`,
+        color: `var(--ink)`,
+    },
+    success: { iconTheme: { primary: `#376675`, secondary: `#ffffff` } },
+}
 
 /**
  * Coordinate authentication, routing, PWA updates, and outbox resume triggers.
@@ -33,6 +46,11 @@ export function App() {
     useEffect( () => {
         void restore()
     }, [ restore ] )
+
+    // Surface the waiting worker in the app menu
+    useEffect( () => {
+        use_pwa.getState().set_update( need_refresh, update_service_worker )
+    }, [ need_refresh, update_service_worker ] )
 
     useEffect( () => {
         if( !account_id ) return undefined
@@ -56,11 +74,13 @@ export function App() {
         }
     }, [ account_id, restore ] )
 
-    if( loading ) return <><GlobalStyle /><main aria-busy="true">Opening your diary…</main></>
+    if( loading ) return <><GlobalStyle /><main aria-busy="true" style={ { padding: `1rem` } }><Skeleton count={ 1 } label="Opening your diary…" /></main></>
+
+    const opening = <Skeleton label="Opening…" />
 
     return <>
         <GlobalStyle />
-        <Toaster position="top-center" />
+        <Toaster position="top-center" toastOptions={ toast_options } />
         <BrowserRouter>
             <QueryParamProvider adapter={ ReactRouter6Adapter }>
                 <Routes>
@@ -71,16 +91,15 @@ export function App() {
                     </> }
                     { user && <>
                         <Route path="/" element={ <AppShell><TodayPage /></AppShell> } />
-                        <Route path="/calendar" element={ <AppShell><Suspense fallback={ <p>Opening…</p> }><CalendarPage /></Suspense></AppShell> } />
-                        <Route path="/search" element={ <AppShell><Suspense fallback={ <p>Opening…</p> }><SearchPage /></Suspense></AppShell> } />
-                        <Route path="/reflection" element={ <AppShell><Suspense fallback={ <p>Opening…</p> }><ReflectionPage /></Suspense></AppShell> } />
-                        <Route path="/settings" element={ <AppShell><Suspense fallback={ <p>Opening…</p> }><SettingsPage /></Suspense></AppShell> } />
+                        <Route path="/calendar" element={ <AppShell><Suspense fallback={ opening }><CalendarPage /></Suspense></AppShell> } />
+                        <Route path="/search" element={ <AppShell><Suspense fallback={ opening }><SearchPage /></Suspense></AppShell> } />
+                        <Route path="/reflection" element={ <AppShell><Suspense fallback={ opening }><ReflectionPage /></Suspense></AppShell> } />
+                        <Route path="/settings" element={ <AppShell><Suspense fallback={ opening }><SettingsPage /></Suspense></AppShell> } />
                         <Route path="/register/:token" element={ <Navigate replace to="/" /> } />
                         <Route path="*" element={ <Navigate replace to="/" /> } />
                     </> }
                 </Routes>
             </QueryParamProvider>
         </BrowserRouter>
-        <InstallControls need_refresh={ need_refresh } update_service_worker={ update_service_worker } />
     </>
 }

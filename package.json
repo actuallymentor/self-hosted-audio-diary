@@ -1,6 +1,6 @@
 {
   "name": "self-hosted-audio-diary",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -38,6 +38,7 @@
     "fastify": "5.12.1",
     "file-type": "21.3.4",
     "less-lazy": "0.0.2",
+    "lucide-react": "1.52.0",
     "mentie": "0.5.4",
     "react": "19.2.8",
     "react-dom": "19.2.8",

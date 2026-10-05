@@ -1,42 +1,37 @@
 import React, { useCallback, useEffect, useRef, useState } from "react"
 import { useLiveQuery } from "dexie-react-hooks"
-import toast from "react-hot-toast"
+import { ChevronLeft, ChevronRight, RotateCcw } from "lucide-react"
 import { StringParam, useQueryParam, withDefault } from "use-query-params"
 import styled from "styled-components"
 
 import { shift_day } from "../../../shared/diary_dates.js"
 import { api } from "../../modules/api/client.js"
 import { current_capture } from "../../modules/recorder/recorder.js"
+import { as_sentence } from "../../modules/text.js"
 import { list_local_recordings } from "../../modules/storage/database.js"
 import { use_session } from "../../stores/session.js"
 import { Button } from "../atoms/Button.jsx"
+import { Skeleton } from "../atoms/Skeleton.jsx"
+import { Modal, ModalActions } from "../molecules/Modal.jsx"
+import { TagsEditor } from "../molecules/TagsEditor.jsx"
 import { Timeline } from "../molecules/Timeline.jsx"
-
-const Picker = styled.label`
-  display: grid;
-  gap: .4rem;
-  max-width: 20rem;
-`
 
 const Navigation = styled.div`
   align-items: end;
   display: flex;
   flex-wrap: wrap;
-  gap: .65rem;
+  gap: .75rem 1rem;
   margin-bottom: 1.5rem;
 
-  input { min-width: 0; width: 100%; }
+  label { display: grid; flex: 0 1 14rem; gap: .35rem; }
+  input { min-width: 0; }
+
+  /* Step controls stay together; faces align with the 44px field */
+  .steps { display: flex; gap: .75rem; padding-bottom: .375rem; }
 `
 
-const TagForm = styled.form`
-  align-items: end;
-  display: flex;
-  flex-wrap: wrap;
-  gap: .75rem;
-  margin: 1rem 0;
-
-  label { display: grid; flex: 1 1 12rem; gap: .35rem; }
-  input { min-width: 0; width: 100%; }
+const Notice = styled.p`
+  color: var(--warn-ink);
 `
 
 function valid_date( value ) {
@@ -57,7 +52,7 @@ export default function CalendarPage() {
     const today = current_capture().local_date
     const [ requested_date, set_date ] = useQueryParam( `date`, withDefault( StringParam, today ) )
     const date = valid_date( requested_date ) ? requested_date : today
-    const [ saving_tags, set_saving_tags ] = useState( false )
+    const [ load_failure, set_load_failure ] = useState( null )
     const active_date = useRef( date )
     const refresh_generation = useRef( 0 )
     const [ remote, set_remote ] = useState( {
@@ -116,7 +111,7 @@ export default function CalendarPage() {
                 settled: true,
                 unavailable: true,
             } ) )
-            if( !quiet && navigator.onLine ) toast.error( error.message )
+            if( !quiet && navigator.onLine ) set_load_failure( error.message ?? `The server did not respond.` )
         }
     }, [ date ] )
 
@@ -145,51 +140,48 @@ export default function CalendarPage() {
         return () => clearInterval( timer )
     }, [ day?.items, refresh ] )
 
-    async function save_tags( event ) {
-        event.preventDefault()
-        const tags = event.currentTarget.elements.tags.value.split( `,` )
+    async function save_tags( tags ) {
+        await api( `/days/${ date }/tags`, { json: { tags }, method: `PUT` } )
+        await refresh()
+    }
 
-        set_saving_tags( true )
-
-        try {
-            await api( `/days/${ date }/tags`, { json: { tags }, method: `PUT` } )
-            await refresh()
-            toast.success( `Tags saved` )
-        } catch ( error ) {
-            toast.error( error.message )
-        } finally {
-            set_saving_tags( false )
-        }
+    function retry() {
+        set_load_failure( null )
+        void refresh()
     }
 
     return <main>
         <h2>Calendar</h2>
         <Navigation>
-            <Button aria-label="Previous day" disabled={ date === `0001-01-01` } onClick={ () => set_date( shift_day( date, -1 ) ) } type="button">←</Button>
-            <Picker>
-                <strong>Diary date</strong>
+            <label>Diary date
                 <input max="9999-12-31" min="0001-01-01" onChange={ event => {
                     if( valid_date( event.target.value ) ) set_date( event.target.value )
                 } } type="date" value={ date }
                 />
-            </Picker>
-            <Button aria-label="Next day" disabled={ date === `9999-12-31` } onClick={ () => set_date( shift_day( date, 1 ) ) } type="button">→</Button>
-            <Button onClick={ () => set_date( current_capture().local_date ) } type="button">Today</Button>
-        </Navigation>
-        { !valid_date( requested_date ) && <p role="status">Invalid diary date. Showing today.</p> }
-        { selected.loaded && <TagForm onSubmit={ save_tags }>
-            <label><strong>Day tags</strong>
-                <input defaultValue={ day.tags.join( `, ` ) } key={ `${ date }:${ day.tags.join( `|` ) }` } name="tags" placeholder="family, health, idea" />
             </label>
-            <Button disabled={ saving_tags } type="submit">{ saving_tags ? `Saving…` : `Save tags` }</Button>
-        </TagForm> }
-        { selected.unavailable && <Button onClick={ () => refresh() } type="button">Retry loading day</Button> }
-        { !selected.settled ? <p>Loading your day…</p> : <Timeline
+            <div className="steps">
+                <Button aria-label="Previous day" disabled={ date === `0001-01-01` } icon={ ChevronLeft } onClick={ () => set_date( shift_day( date, -1 ) ) } />
+                <Button aria-label="Next day" disabled={ date === `9999-12-31` } icon={ ChevronRight } onClick={ () => set_date( shift_day( date, 1 ) ) } />
+                <Button disabled={ date === today } onClick={ () => set_date( current_capture().local_date ) }>Today</Button>
+            </div>
+        </Navigation>
+        { !valid_date( requested_date ) && <Notice role="status">Invalid diary date. Showing today.</Notice> }
+        { selected.loaded && <TagsEditor initial={ day.tags.join( `, ` ) } key={ date } on_save={ save_tags } /> }
+        { !selected.settled ? <Skeleton label="Loading your day…" /> : <Timeline
             items={ day?.items ?? [] }
             local_recordings={ local_recordings }
             on_changed={ refresh }
+            on_retry={ retry }
             remote_loaded={ selected.loaded }
             remote_unavailable={ selected.unavailable }
         /> }
+
+        <Modal on_close={ () => set_load_failure( null ) } open={ Boolean( load_failure ) } title="Day not loaded">
+            <p>{ load_failure && as_sentence( load_failure ) } Entries saved on this device stay visible.</p>
+            <ModalActions>
+                <Button onClick={ () => set_load_failure( null ) }>Close</Button>
+                <Button icon={ RotateCcw } onClick={ retry } primary>Retry</Button>
+            </ModalActions>
+        </Modal>
     </main>
 }

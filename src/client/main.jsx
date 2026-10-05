@@ -12,6 +12,11 @@ for( const property of [ `--font-scale`, `--letter-spacing`, `--line-height` ] )
     if( value ) document.documentElement.style.setProperty( property, value )
 }
 
+// Hidden documents pause every CSS loop (see GlobalStyle)
+const mark_visibility = () => document.documentElement.toggleAttribute( `data-hidden`, document.hidden )
+document.addEventListener( `visibilitychange`, mark_visibility )
+mark_visibility()
+
 createRoot( document.getElementById( `root` ) ).render(
     <React.StrictMode>
         <App />

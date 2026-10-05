@@ -4,7 +4,7 @@ Private voice journaling with offline recording, resumable uploads, local
 multilingual transcription, search, reflections, and ordinary files you can back
 up without SHAD.
 
-Status: `0.4.0` preview. Images support `linux/amd64` and `linux/arm64`. Physical
+Status: `0.5.0` preview. Images support `linux/amd64` and `linux/arm64`. Physical
 iPhone and Android validation remains required before `1.0.0`.
 
 ## Requirements
@@ -26,7 +26,7 @@ name: shad
 
 services:
   app:
-    image: actuallymentor/self-hosted-audio-diary:0.4.0
+    image: actuallymentor/self-hosted-audio-diary:0.5.0
     restart: unless-stopped
     init: true
     ports:
@@ -62,7 +62,7 @@ services:
         condition: service_started
 
   transcriber:
-    image: actuallymentor/self-hosted-audio-diary-transcriber:0.4.0
+    image: actuallymentor/self-hosted-audio-diary-transcriber:0.5.0
     restart: unless-stopped
     init: true
     environment:
@@ -135,8 +135,12 @@ Settings.
   The displayed dates are the exact inclusive range. Speech requires `OPENROUTER_API_KEY`.
 - Adjust reading size and spacing in Settings with live values, default markers,
   resets, and a reading preview. Preferences persist on this browser.
-- Open Menu on mobile; desktop navigation stays visible at the top.
-- Install the PWA from its in-app Install button or browser menu.
+- Navigate with bottom tabs on mobile or the top bar on desktop. Settings, Install,
+  Update, and Sign out live in the top-right menu.
+- Edit or delete entries from their compact icon actions. Hover or focus reveals the
+  label; on touch, press and hold to read it without acting.
+- Light and dark themes follow the device setting.
+- Install the PWA from the menu's Install app item or the browser menu.
 
 Recordings survive offline use, reloads, and interrupted uploads. Valid local
 chunks resume when connectivity returns. Damaged captures stay in the device

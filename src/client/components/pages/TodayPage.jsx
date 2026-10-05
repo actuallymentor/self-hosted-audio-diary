@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react"
 import { useLiveQuery } from "dexie-react-hooks"
+import { CloudUpload, Inbox } from "lucide-react"
 import toast from "react-hot-toast"
 import styled from "styled-components"
 
@@ -14,31 +15,39 @@ import { RecorderCard } from "../molecules/RecorderCard.jsx"
 const TextForm = styled.form`
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 1rem;
+  border-radius: .75rem;
   display: grid;
-  gap: .75rem;
-  margin: 1rem 0 2rem;
-  padding: 1rem;
+  gap: .5rem;
+  margin: 1rem auto 2rem;
+  max-width: 40rem;
+  padding: 1.25rem;
+
+  footer { display: flex; flex-wrap: wrap; gap: .75rem; justify-content: flex-end; margin-top: .75rem; }
 `
 
-const Pending = styled.section`
-  background: #fffbea;
-  border: 1px solid #ead88a;
-  border-radius: 1rem;
-  margin: 1rem 0;
-  padding: 1rem;
+const Panel = styled.section`
+  border-radius: .75rem;
+  display: grid;
+  gap: .6rem;
+  margin: 1rem auto;
+  max-width: 40rem;
+  padding: 1rem 1.25rem;
+
+  h2 { align-items: center; display: flex; font-size: 1rem; gap: .5rem; margin: 0; }
+  small { color: inherit; opacity: .85; }
+  ul { display: grid; gap: .5rem; list-style: none; margin: 0; padding: 0; }
 `
 
-const Uploading = styled.section`
-  background: #edf8fa;
-  border: 1px solid #bddde4;
-  border-radius: 1rem;
-  display: grid;
-  gap: .65rem;
-  margin: 1rem 0;
-  padding: 1rem;
+// Amber: kept on this device, not yet safe on the server
+const Pending = styled( Panel )`
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-line);
+  color: var(--warn-ink);
+`
 
-  small { color: var(--muted); }
+const Uploading = styled( Panel )`
+  background: var(--info-bg);
+  color: var(--info-ink);
 `
 
 const UploadHeading = styled.div`
@@ -46,11 +55,13 @@ const UploadHeading = styled.div`
   display: flex;
   gap: 1rem;
   justify-content: space-between;
+
+  span { font-variant-numeric: tabular-nums; }
 `
 
 const UploadBar = styled.progress`
-  accent-color: var(--accent);
-  height: .8rem;
+  accent-color: var(--action);
+  height: .5rem;
   width: 100%;
 `
 
@@ -70,7 +81,7 @@ function UploadProgress( { recording } ) {
 
     return <Uploading aria-live="polite">
         <UploadHeading>
-            <strong>{ finalizing ? `Finishing safely…` : `Uploading ${ name }…` }</strong>
+            <h2><CloudUpload aria-hidden="true" size={ 16 } strokeWidth={ 1.5 } />{ finalizing ? `Finishing safely…` : `Uploading ${ name }…` }</h2>
             { uploaded_bytes > 0 && <span>{ percentage }%</span> }
         </UploadHeading>
         <UploadBar
@@ -139,19 +150,24 @@ export function TodayPage() {
         <RecorderCard account_id={ user.id } on_note={ () => set_writing( true ) } />
         { uploading.map( recording => <UploadProgress key={ recording.id } recording={ recording } /> ) }
         { outbox.length > 0 && <Pending aria-live="polite">
-            <strong>Device outbox</strong>
-            { outbox.map( recording => <p key={ recording.id }>
-                { recording.item_type && recording.status === `recording`
-                    ? <span>Saving { upload_name( recording ) } on this device…</span>
-                    : <Status value={ recording.status } /> }
-                { recording.status === `unrecoverable` && <> — { recording.last_error }</> }
-            </p> ) }
+            <h2><Inbox aria-hidden="true" size={ 16 } strokeWidth={ 1.5 } />Device outbox</h2>
+            <small>Kept safely on this device until the server confirms each item.</small>
+            <ul>
+                { outbox.map( recording => <li key={ recording.id }>
+                    { recording.item_type && recording.status === `recording`
+                        ? <span>Saving { upload_name( recording ) } on this device…</span>
+                        : <Status value={ recording.status } /> }
+                    { recording.status === `unrecoverable` && <> — { recording.last_error }</> }
+                </li> ) }
+            </ul>
         </Pending> }
         { writing && <TextForm onSubmit={ save_text }>
-            <label htmlFor="note"><strong>Write a note</strong></label>
+            <label htmlFor="note">Write a note</label>
             <textarea autoFocus id="note" name="note" placeholder="A detail worth remembering…" required />
-            <Button disabled={ saving } primary type="submit">{ saving ? `Saving…` : `Save note` }</Button>
-            <Button disabled={ saving } onClick={ () => set_writing( false ) } type="button">Cancel</Button>
+            <footer>
+                <Button disabled={ saving } onClick={ () => set_writing( false ) }>Cancel</Button>
+                <Button busy={ saving } disabled={ saving } primary type="submit">{ saving ? `Saving…` : `Save note` }</Button>
+            </footer>
         </TextForm> }
     </main>
 }

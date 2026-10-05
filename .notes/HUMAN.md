@@ -46,3 +46,16 @@
   needed to publish images or inspect public Actions results.
 - Do not confuse passing CI or locally built images with completed deployment;
   verify published images and the running production version.
+
+## 2026-10-05 — design alignment decisions (review)
+
+- Filled actions use the approved darker fallback `#376675` (white text ≈6.4:1),
+  not the brand accent `#7ec0d0` (≈2:1). The accent stays for focus halo, active
+  lines, dark-mode links and artwork.
+- Settings, install and update moved behind the top-right menu. Today, Calendar,
+  Search and Reflect are bottom tabs on mobile and a top bar on desktop.
+- Delete keeps a confirm dialog plus Undo, but no acknowledgment checkbox: items go
+  to recoverable trash, not permanent deletion.
+- Animated artwork appears only on sign-in and empty states, never near Record.
+- Not verified: real touch hardware (long-press was CDP-emulated), install prompt,
+  update-ready indicator, physical haptics/sounds.

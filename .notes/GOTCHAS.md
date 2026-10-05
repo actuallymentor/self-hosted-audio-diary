@@ -53,3 +53,15 @@
 - GitHub's `ubuntu-24.04` quality runner does not guarantee `ffmpeg` is installed.
   Provision it before host-side media integration tests; the production image
   already includes it.
+- The production server indexes `dist/` at startup. After `npm run build`, restart
+  it; otherwise new hashed bundles fall through to the SPA HTML and the page is blank.
+- `pkill -f "node src/server/server.js"` matches the invoking shell too. Free the
+  port with `fuser -k <port>/tcp` instead.
+- Styled `display` rules override the `hidden` attribute. Pair any always-rendered
+  panel with `&[hidden] { display: none; }`.
+- Puppeteer's `emulateMediaFeatures` rejects `forced-colors`. Use CDP
+  `Emulation.setEmulatedMedia` for forced-colors checks.
+- Codex's read-only sandbox cannot create namespaces in this container. Inline
+  context into the prompt for external reviews.
+- E2E runs locally without the transcriber: start a fresh server on a spare port,
+  wait for `/version`, then `APP_BASE_URL=… CHROME_HEADLESS=true npm run test:e2e`.

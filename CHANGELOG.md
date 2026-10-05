@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.5.0] - 2026-10-05
+
+### Added
+
+- Add light and dark themes that follow the device setting.
+- Add mobile bottom tabs, desktop icon navigation, and a top-right menu.
+- Add confirm, edit, failure, and help dialogs with focus return.
+- Add a day-tags save lifecycle: Unsaved badge, banner, Discard, Changes saved.
+- Add loading skeletons, empty states, and quiet animated artwork.
+- Add tinted status pills with icons and expanding item actions.
+
+### Changed
+
+- Restyle controls: Lucide icons, pill buttons with 44px targets, soft focus halo.
+- Replace browser prompt/confirm with in-app dialogs; keep Undo after delete.
+- Use switches for recording feedback and highlight search matches.
+- Move Install and Update into the menu; label the login action Sign in.
+
+### Fixed
+
+- Show the menu icon instead of a missing-glyph box on systems without ☰.
+- Stop the Install pill from covering page content.
+- Handle search, invitation, and sign-out failures instead of failing silently.
+
 ## [0.4.0] - 2026-09-09
 
 ### Added

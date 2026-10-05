@@ -6,28 +6,34 @@ import styled from "styled-components"
 import { api } from "../../modules/api/client.js"
 import { use_session } from "../../stores/session.js"
 import { Button } from "../atoms/Button.jsx"
+import { Soundscape } from "../molecules/Soundscape.jsx"
 
 const Wrap = styled.main`
   align-items: center;
   display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
   justify-content: center;
   min-height: 100vh;
-  padding: 1rem;
+  padding: 2rem 1rem;
 `
 
 const Card = styled.form`
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 1.4rem;
+  border-radius: .875rem;
   box-shadow: var(--shadow);
   display: grid;
-  gap: 1rem;
-  max-width: 28rem;
+  gap: 1.25rem;
+  max-width: 26rem;
   padding: 2rem;
   width: 100%;
 
-  h1, p { margin: 0; }
-  label { display: grid; font-weight: 800; gap: .35rem; }
+  header { text-align: center; }
+  h1 { font-size: 1.625rem; margin: 0 0 .35rem; }
+  header p { color: var(--muted); margin: 0; }
+  label { display: grid; gap: .35rem; }
+  button { justify-self: stretch; margin-top: .25rem; }
 `
 
 /**
@@ -72,15 +78,18 @@ export function AuthPage() {
         ? `Recover account`
         : token ? `Accept invitation` : bootstrap_available ? `Create administrator` : `Welcome back`
 
+    const action = !recovery_token && !token && !bootstrap_available ? `Sign in` : heading
+
     return <Wrap>
+        <Soundscape size="7.5rem" />
         <Card onSubmit={ submit }>
-            <div>
+            <header>
                 <h1>{ heading }</h1>
                 <p>Your private diary lives on your server.</p>
-            </div>
+            </header>
             { !recovery_token && <label>Email <input autoComplete="email" name="email" required type="email" /></label> }
             <label>Password <input autoComplete={ token ? `new-password` : `current-password` } minLength="12" name="password" required type="password" /></label>
-            <Button disabled={ busy } primary type="submit">{ busy ? `Working…` : heading }</Button>
+            <Button busy={ busy } disabled={ busy } primary type="submit">{ busy ? `Working…` : action }</Button>
         </Card>
     </Wrap>
 }

@@ -80,3 +80,7 @@
 - 2026-09-09 — Deployed verified `v0.4.0` images after all CI and release jobs
   passed. Production app/transcriber are healthy, the speech model is ready, and
   public HTTPS version/readiness plus mobile Chrome smoke passed.
+- 2026-10-05 — Aligned the client UI with Mentor's design preferences: tokens with
+  light/dark themes, Lucide icons, pill buttons with 44px targets, bottom tabs plus
+  top-right menu, native-dialog modals, tags save lifecycle, skeletons, empty states
+  and Soundscape artwork. Unit/integration and full local e2e passed.

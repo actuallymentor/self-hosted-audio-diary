@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react"
 import { useLiveQuery } from "dexie-react-hooks"
+import { Camera, LoaderCircle, Mic, NotebookPen, Plus, Square, Video, X } from "lucide-react"
 import toast from "react-hot-toast"
 import styled from "styled-components"
 
@@ -10,42 +11,66 @@ import { Button } from "../atoms/Button.jsx"
 import { Status } from "../atoms/Status.jsx"
 
 const Card = styled.section`
-  padding: clamp(2rem, 8vh, 5rem) 0;
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  padding: clamp(2rem, 9vh, 5rem) 0 1rem;
   text-align: center;
 `
 
+// The one dominant control: large round target, icon above label
 const Record = styled.button`
-  align-items: center;
-  background: ${ ( { $recording } ) => $recording ? `#a82c3c` : `var(--accent)` };
+  background: ${ ( { $recording } ) => $recording ? `var(--danger)` : `var(--action)` };
   border: 0;
-  border-radius: 50%;
-  color: white;
-  display: inline-flex;
-  font-family: "Montserrat Variable", sans-serif;
-  font-size: 1.2rem;
-  min-height: 9rem;
-  justify-content: center;
+  box-shadow: var(--shadow);
+  color: #ffffff;
+  flex-direction: column;
+  font-family: "Montserrat Variable", Montserrat, system-ui, sans-serif;
+  font-size: 1.1rem;
+  font-weight: 500;
+  gap: .4rem;
+  height: 9rem;
   margin: 1rem;
-  min-width: 9rem;
+  width: 9rem;
+
+  &:hover:not(:disabled) {
+    background: ${ ( { $recording } ) => $recording ? `var(--danger)` : `var(--action-hover)` };
+    border-color: transparent;
+    filter: brightness(1.05);
+  }
+
+  &::before { inset: 0; }
+  .spin { animation: shad-spin 900ms linear infinite; }
+`
+
+const StatusLine = styled.div`
+  min-height: 2rem;
 `
 
 const Secondary = styled.div`
   display: flex;
   flex-wrap: wrap;
-  gap: .65rem;
+  gap: .75rem;
   justify-content: center;
   margin-top: 1rem;
+
+  > * { animation: shad-fade 240ms ease both; }
+  > :nth-child(2) { animation-delay: 40ms; }
+  > :nth-child(3) { animation-delay: 80ms; }
 `
 
 const More = styled( Button )`
-  background: transparent;
   border-color: transparent;
   color: var(--muted);
-  font-size: 1.5rem;
-  margin-top: 1rem;
+  margin-top: .5rem;
 `
 
 const HiddenInput = styled.input`display: none;`
+
+function RecordGlyph( { busy, recording } ) {
+    const Glyph = busy ? LoaderCircle : recording ? Square : Mic
+    return <Glyph aria-hidden="true" className={ busy ? `spin` : undefined } size={ 28 } strokeWidth={ 1.5 } />
+}
 
 /**
  * Provide the dominant native microphone action plus secondary media capture.
@@ -173,22 +198,23 @@ export function RecorderCard( { account_id, on_note } ) {
             disabled={ busy }
             onClick={ toggle_recording }
             type="button"
-        >{ button_label }</Record>
-        <div aria-live="polite">{ ![ `idle`, `uploaded` ].includes( visible_state ) && <Status value={ visible_state } /> }</div>
-        <div>
-            <More
-                ref={ more_button }
-                aria-controls="capture-options"
-                aria-expanded={ expanded }
-                aria-label="Add entry"
-                onClick={ () => set_expanded( !expanded ) }
-                type="button"
-            >{ expanded ? `−` : `+` }</More>
-        </div>
+        >
+            <RecordGlyph busy={ busy } recording={ recording } />
+            { button_label }
+        </Record>
+        <StatusLine aria-live="polite">{ ![ `idle`, `uploaded` ].includes( visible_state ) && <Status value={ visible_state } /> }</StatusLine>
+        <More
+            ref={ more_button }
+            aria-controls="capture-options"
+            aria-expanded={ expanded }
+            aria-label="Add entry"
+            icon={ expanded ? X : Plus }
+            onClick={ () => set_expanded( !expanded ) }
+        />
         { expanded && <Secondary id="capture-options">
-            <Button onClick={ write_note } type="button">Note</Button>
-            <Button onClick={ () => choose_media( photo_input ) } type="button">Photo</Button>
-            <Button onClick={ () => choose_media( video_input ) } type="button">Video</Button>
+            <Button icon={ NotebookPen } onClick={ write_note }>Note</Button>
+            <Button icon={ Camera } onClick={ () => choose_media( photo_input ) }>Photo</Button>
+            <Button icon={ Video } onClick={ () => choose_media( video_input ) }>Video</Button>
         </Secondary> }
         <HiddenInput
             ref={ photo_input }
