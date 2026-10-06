@@ -15,7 +15,7 @@
 - Release: https://github.com/actuallymentor/self-hosted-audio-diary/actions/runs/34340808962 — verification, publication, and published-image validation passed.
 - Public URL: https://diary.mylentor.life (SWAG reverse proxy).
 - After deployment: both containers healthy; transcriber model ready; public
-  `/version` reports `0.4.0`, `/health/ready` reports `ok`. Real mobile Chrome
+  `/version` reports `0.5.0`, `/health/ready` reports `ok`. Real mobile Chrome
   login-page smoke passed with no JavaScript errors or horizontal overflow.
   Authenticated UX was exercised in isolated local Docker tests.
 - No directly published app port.
