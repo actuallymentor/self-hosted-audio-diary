@@ -9,8 +9,8 @@
   complete configuration-file list before updating only these two services.
 - Images: `actuallymentor/self-hosted-audio-diary:latest` and
   `actuallymentor/self-hosted-audio-diary-transcriber:latest`.
-- Deployed version: `0.4.0`, verified 2026-09-09; prior version `0.3.0`.
-- Source: tag `v0.4.0`, commit `b09225e`.
+- Deployed version: `0.5.0`, verified 2026-10-06; prior version `0.4.0`.
+- Source: tag `v0.5.0`, commit `a57e5ba`.
 - CI: https://github.com/actuallymentor/self-hosted-audio-diary/actions/runs/34340778213 — all four jobs passed.
 - Release: https://github.com/actuallymentor/self-hosted-audio-diary/actions/runs/34340808962 — verification, publication, and published-image validation passed.
 - Public URL: https://diary.mylentor.life (SWAG reverse proxy).
@@ -27,10 +27,11 @@
   tag or a published GitHub release. Confirm CI, release jobs,
   registry validation, and running-service version before claiming deployment.
 
-- Deploy recipe (untested): sibling `docker:cli` container with the host Compose
+- Deploy recipe (verified 2026-10-06 for 0.5.0): sibling `docker:cli` container with the host Compose
   directory bind-mounted read-only, project `docker-composition`, all label-listed
   `-f` files; `pull` then `up -d --no-deps audio-diary audio-diary-transcriber`.
   Transcriber restart reloads `large-v3` and spikes host CPU; ask before deploying.
+  Confirm `latest` digests match the version tag before pulling.
 
 ## Local verification
 

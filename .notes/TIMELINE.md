@@ -87,3 +87,6 @@
 - 2026-10-05 — Released `v0.5.0` (commit `a57e5ba`): main CI run 37346367241 and
   release run 37347809239 passed; both 0.5.0 images are on Docker Hub. Production
   deploy held at the owner's request (host CPU needed); prod still runs 0.4.0.
+- 2026-10-06 — Deployed `v0.5.0` to production with only the two diary services
+  recreated. Both healthy, model ready, public `/version` reports `0.5.0`, and the
+  mobile Chrome login smoke passed in light and dark with no errors or overflow.
