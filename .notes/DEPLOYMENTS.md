@@ -9,13 +9,13 @@
   complete configuration-file list before updating only these two services.
 - Images: `actuallymentor/self-hosted-audio-diary:latest` and
   `actuallymentor/self-hosted-audio-diary-transcriber:latest`.
-- Deployed version: `0.5.0`, verified 2026-10-06; prior version `0.4.0`.
-- Source: tag `v0.5.0`, commit `a57e5ba`.
-- CI: https://github.com/actuallymentor/self-hosted-audio-diary/actions/runs/34340778213 — all four jobs passed.
-- Release: https://github.com/actuallymentor/self-hosted-audio-diary/actions/runs/34340808962 — verification, publication, and published-image validation passed.
+- Deployed version: `0.6.0`, verified 2026-11-01; prior version `0.5.0`.
+- Source: tag `v0.6.0`, commit `7a4ce25`.
+- CI: https://github.com/actuallymentor/self-hosted-audio-diary/actions/runs/41298183612 — passed.
+- Release: https://github.com/actuallymentor/self-hosted-audio-diary/actions/runs/41298764410 — verification, publication, and published-image validation passed.
 - Public URL: https://diary.mylentor.life (SWAG reverse proxy).
 - After deployment: both containers healthy; transcriber model ready; public
-  `/version` reports `0.5.0`, `/health/ready` reports `ok`. Real mobile Chrome
+  `/version` reports `0.6.0`, `/health/ready` reports `ok`. Real mobile Chrome
   login-page smoke passed with no JavaScript errors or horizontal overflow.
   Authenticated UX was exercised in isolated local Docker tests.
 - No directly published app port.
@@ -27,11 +27,12 @@
   tag or a published GitHub release. Confirm CI, release jobs,
   registry validation, and running-service version before claiming deployment.
 
-- Deploy recipe (verified 2026-10-06 for 0.5.0): sibling `docker:cli` container with the host Compose
+- Deploy recipe (verified 2026-11-01 for 0.6.0; run docker through `sudo -n`): sibling `docker:cli` container with the host Compose
   directory bind-mounted read-only, project `docker-composition`, all label-listed
   `-f` files; `pull` then `up -d --no-deps audio-diary audio-diary-transcriber`.
   Transcriber restart reloads `large-v3` and spikes host CPU; deploy only with owner approval.
   Confirm `latest` digests match the version tag before pulling.
+  Watch CI with authenticated `gh`; anonymous API polling hits the shared-IP limit.
 
 ## Local verification
 

@@ -93,3 +93,5 @@
 - 2026-11-01 — Owner-requested design audit, `0.6.0`: Calendar became a feed of days
   with entries plus closest-day jump; slide-in drawer; portrait lock; seekable WebM
   playback via disposable remux. Unit/integration and full local e2e passed.
+- 2026-11-01 — Released and deployed `v0.6.0` (commit `7a4ce25`); only the two diary
+  services recreated. Public version/readiness and login smoke passed.
