@@ -95,3 +95,5 @@
   playback via disposable remux. Unit/integration and full local e2e passed.
 - 2026-11-01 — Released and deployed `v0.6.0` (commit `7a4ce25`); only the two diary
   services recreated. Public version/readiness and login smoke passed.
+- 2026-11-01 — External review drove `v0.6.1` (`448653f`): tag drafts, scroll guard, Latest,
+  index retry, serial remux, delete race. App recreated; transcriber left on 0.6.0.

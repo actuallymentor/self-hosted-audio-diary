@@ -75,3 +75,5 @@
 - Plain `docker` lacks socket permission for `node`; use `sudo -n docker`.
 - The agent container has no ffmpeg by default; `apt-get update` then install it
   before integration tests.
+- Offline, a saved recording flips `saved_local` -> `retry` almost instantly; e2e waits
+  must accept both labels.
