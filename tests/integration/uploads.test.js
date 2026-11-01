@@ -292,6 +292,12 @@ test( `serves a seekable playback copy of live WebM and keeps the original intac
     const archived = await fs.readFile( path.join( diary_data_path, original ) )
     assert.equal( createHash( `sha256` ).update( archived ).digest( `hex` ), item.sha256 )
 
+    // Deletion waits for a running remux, so the copy cannot reappear afterwards
+    await fs.rm( copy )
+    const replay = client.request( `/api/v1/media/${ upload_id }`, { headers: { Range: `bytes=0-99` } } )
+    await new Promise( resolve => setTimeout( resolve, 5 ) )
     await client.request( `/api/v1/items/${ upload_id }`, { method: `DELETE` } )
+    await replay
+    await new Promise( resolve => setTimeout( resolve, 300 ) )
     await assert.rejects( fs.access( copy ) )
 } )

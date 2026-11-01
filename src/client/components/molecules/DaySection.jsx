@@ -126,11 +126,11 @@ export function DaySection( { attempt, date, local_recordings, on_changed, on_fa
     // Scroll once per link, so a later background refresh cannot yank the reader back
     const reached_hash = useRef( null )
     useEffect( () => {
-        const entry = remote.loaded && hash.startsWith( `#item-` ) && document.getElementById( hash.slice( 1 ) )
-        if( !entry || reached_hash.current === hash ) return
+        const owns_entry = day?.items.some( item => hash === `#item-${ item.id }` )
+        if( !owns_entry || reached_hash.current === hash ) return
         reached_hash.current = hash
-        entry.scrollIntoView( { block: `start` } )
-    }, [ hash, remote.loaded ] )
+        document.getElementById( hash.slice( 1 ) )?.scrollIntoView( { block: `start` } )
+    }, [ day, hash ] )
 
     async function changed() {
         await refresh()
@@ -145,7 +145,7 @@ export function DaySection( { attempt, date, local_recordings, on_changed, on_fa
     return <Section aria-label={ day_label( date ) } data-date={ date }>
         <Heading>
             <h3>{ day_label( date ) }</h3>
-            { remote.loaded && <IconAction icon={ Tag } label="Edit tags" onClick={ () => set_tagging( true ) } /> }
+            { day && <IconAction icon={ Tag } label="Edit tags" onClick={ () => set_tagging( true ) } /> }
         </Heading>
 
         { day?.tags.length > 0 && <Tags aria-label="Day tags">{ day.tags.map( tag => <li key={ tag }>#{ tag }</li> ) }</Tags> }
@@ -159,7 +159,8 @@ export function DaySection( { attempt, date, local_recordings, on_changed, on_fa
             remote_unavailable={ remote.unavailable }
         /> }
 
-        { remote.loaded && <Modal on_close={ () => set_tagging( false ) } open={ tagging } title={ `Tags · ${ day_label( date ) }` }>
+        { /* Stays mounted through refreshes, so a sync cannot wipe a tag draft */ }
+        { day && <Modal on_close={ () => set_tagging( false ) } open={ tagging } title={ `Tags · ${ day_label( date ) }` }>
             <TagsEditor initial={ day.tags.join( `, ` ) } on_save={ save_tags } />
         </Modal> }
     </Section>

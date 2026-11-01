@@ -4,7 +4,7 @@ Private voice journaling with offline recording, resumable uploads, local
 multilingual transcription, search, reflections, and ordinary files you can back
 up without SHAD.
 
-Status: `0.6.0` preview. Images support `linux/amd64` and `linux/arm64`. Physical
+Status: `0.6.1` preview. Images support `linux/amd64` and `linux/arm64`. Physical
 iPhone and Android validation remains required before `1.0.0`.
 
 ## Requirements
@@ -26,7 +26,7 @@ name: shad
 
 services:
   app:
-    image: actuallymentor/self-hosted-audio-diary:0.6.0
+    image: actuallymentor/self-hosted-audio-diary:0.6.1
     restart: unless-stopped
     init: true
     ports:
@@ -62,7 +62,7 @@ services:
         condition: service_started
 
   transcriber:
-    image: actuallymentor/self-hosted-audio-diary-transcriber:0.6.0
+    image: actuallymentor/self-hosted-audio-diary-transcriber:0.6.1
     restart: unless-stopped
     init: true
     environment:

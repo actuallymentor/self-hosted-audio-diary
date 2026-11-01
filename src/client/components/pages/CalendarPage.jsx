@@ -49,6 +49,14 @@ const Invalid = styled( Notice )`
   color: var(--warn-ink);
 `
 
+const Partial = styled( Notice )`
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .25rem .75rem;
+  max-width: none;
+`
+
 function valid_date( value ) {
     if( !/^\d{4}-\d{2}-\d{2}$/.test( value ?? `` ) || value < `0001-01-01` ) return false
 
@@ -125,12 +133,18 @@ export default function CalendarPage() {
         void load_index()
     }, [ attempt, load_index ] )
 
+    // Reconnecting with an empty outbox syncs nothing, so listen for it directly
     useEffect( () => {
 
-        const synchronized = () => void load_index( { quiet: true } )
+        const refresh = () => void load_index( { quiet: true } )
 
-        window.addEventListener( `shad:synchronized`, synchronized )
-        return () => window.removeEventListener( `shad:synchronized`, synchronized )
+        window.addEventListener( `shad:synchronized`, refresh )
+        window.addEventListener( `online`, refresh )
+
+        return () => {
+            window.removeEventListener( `shad:synchronized`, refresh )
+            window.removeEventListener( `online`, refresh )
+        }
 
     }, [ load_index ] )
 
@@ -183,6 +197,11 @@ export default function CalendarPage() {
 
     }, [] )
 
+    function show_latest() {
+        set_date( undefined )
+        window.scrollTo( 0, 0 )
+    }
+
     function retry() {
         set_load_failure( null )
         set_attempt( attempt + 1 )
@@ -201,11 +220,16 @@ export default function CalendarPage() {
                 } } type="date" value={ target ?? `` }
                 />
             </label>
-            <Button disabled={ !requested_date } icon={ ArrowUp } onClick={ () => set_date( undefined ) }>Latest</Button>
+            <Button icon={ ArrowUp } onClick={ show_latest }>Latest</Button>
         </JumpBar>
 
         { invalid && <Invalid role="status">Invalid diary date. Showing the latest entries.</Invalid> }
         { target && anchor && anchor !== target && <Notice role="status">Nothing on { format_day( target ) }. Showing the closest day.</Notice> }
+
+        { index.unavailable && dates.length > 0 && <Partial role="status">
+            <span>Showing entries on this device. Older days could not be loaded.</span>
+            <Button icon={ RotateCcw } onClick={ retry } quiet>Retry</Button>
+        </Partial> }
 
         { !index.settled && <Skeleton label="Loading your diary…" /> }
 

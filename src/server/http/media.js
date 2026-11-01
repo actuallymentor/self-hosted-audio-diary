@@ -7,6 +7,9 @@ import { promisify } from "node:util"
 const execute_file = promisify( execFile )
 const remuxes = new Map()
 
+// Merely opening the feed requests metadata for every player, so remux one file at a time
+let remux_queue = Promise.resolve()
+
 // Browser MediaRecorder streams WebM live: the file has no duration and no seek index
 const needs_remux = mime => [ `audio/webm`, `video/webm` ].includes( mime )
 
@@ -57,7 +60,8 @@ export async function playback_target( runtime, request, { item, target } ) {
 
     // Concurrent range requests share one remux
     if( !remuxes.has( item.id ) ) {
-        const pending = remux( target, copy ).finally( () => remuxes.delete( item.id ) )
+        const pending = remux_queue.then( () => remux( target, copy ) ).finally( () => remuxes.delete( item.id ) )
+        remux_queue = pending.catch( () => {} )
         remuxes.set( item.id, pending )
     }
 
@@ -78,6 +82,9 @@ export async function playback_target( runtime, request, { item, target } ) {
  * @param {string} item_id
  */
 export async function remove_playback( runtime, item_id ) {
+
+    // A running remux would publish its copy after this removal, so let it land first
+    await remuxes.get( item_id )?.catch( () => {} )
     await fs.rm( playback_path( runtime, item_id ), { force: true } )
 }
 

@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.6.1] - 2026-11-01
+
+### Fixed
+
+- Keep unsaved tag edits through background sync.
+- Stop loading older days from jumping back to a search result.
+- Make Latest return to the newest entry from any scroll position.
+- Show index retry on partial feeds; refresh the feed on reconnect.
+- Remux one recording at a time; deletion waits for an active remux.
+
 ## [0.6.0] - 2026-11-01
 
 ### Added

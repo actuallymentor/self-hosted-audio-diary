@@ -70,3 +70,5 @@
   have no web API for it. An installed Android app may need a reinstall or a manifest
   refresh before it applies.
 - Not verified: real touch hardware, physical Android portrait lock.
+- Playback copies have no eviction: at most one near-full-size duplicate per WebM in
+  `APP_DATA/playback`, removed on trash. Add a budget if that volume gets tight.
