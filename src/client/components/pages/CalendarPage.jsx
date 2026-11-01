@@ -133,17 +133,18 @@ export default function CalendarPage() {
         void load_index()
     }, [ attempt, load_index ] )
 
-    // Reconnecting with an empty outbox syncs nothing, so listen for it directly
+    // Reconnecting with an empty outbox syncs nothing, so retry the index and every day directly
     useEffect( () => {
 
         const refresh = () => void load_index( { quiet: true } )
+        const reconnect = () => set_attempt( current => current + 1 )
 
         window.addEventListener( `shad:synchronized`, refresh )
-        window.addEventListener( `online`, refresh )
+        window.addEventListener( `online`, reconnect )
 
         return () => {
             window.removeEventListener( `shad:synchronized`, refresh )
-            window.removeEventListener( `online`, refresh )
+            window.removeEventListener( `online`, reconnect )
         }
 
     }, [ load_index ] )

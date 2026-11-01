@@ -83,9 +83,14 @@ export async function playback_target( runtime, request, { item, target } ) {
  */
 export async function remove_playback( runtime, item_id ) {
 
-    // A running remux would publish its copy after this removal, so let it land first
-    await remuxes.get( item_id )?.catch( () => {} )
-    await fs.rm( playback_path( runtime, item_id ), { force: true } )
+    const remove = () => fs.rm( playback_path( runtime, item_id ), { force: true } )
+    const running = remuxes.get( item_id )
+
+    // A running remux would publish its copy after this removal, so clean up behind it.
+    // Detached: the queue may hold unrelated jobs, and deletion must not wait for those.
+    if( running ) return void running.finally( remove ).catch( () => {} )
+
+    await remove()
 }
 
 /**
