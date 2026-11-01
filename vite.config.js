@@ -22,7 +22,7 @@ export default defineConfig( {
                 ],
                 id: `/`,
                 name: `SHAD · Self-Hosted Audio Diary`,
-                orientation: `any`,
+                orientation: `portrait`,
                 scope: `/`,
                 short_name: `SHAD`,
                 start_url: `/`,

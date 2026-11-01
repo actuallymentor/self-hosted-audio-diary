@@ -90,3 +90,6 @@
 - 2026-10-06 — Deployed `v0.5.0` to production with only the two diary services
   recreated. Both healthy, model ready, public `/version` reports `0.5.0`, and the
   mobile Chrome login smoke passed in light and dark with no errors or overflow.
+- 2026-11-01 — Owner-requested design audit, `0.6.0`: Calendar became a feed of days
+  with entries plus closest-day jump; slide-in drawer; portrait lock; seekable WebM
+  playback via disposable remux. Unit/integration and full local e2e passed.

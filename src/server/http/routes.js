@@ -24,7 +24,7 @@ import {
 import { digest_token, random_token } from "../auth/crypto.js"
 import { day_paths } from "../archive/day_store.js"
 import { confined_path, user_root } from "../archive/paths.js"
-import { send_media } from "./media.js"
+import { playback_target, send_media } from "./media.js"
 import { api_prefix } from "../../shared/constants.js"
 
 const email_schema = z.email().max( 254 )
@@ -165,6 +165,10 @@ export async function register_routes( app, runtime ) {
         return create_invitation( runtime, request.user.id )
     } )
 
+    app.get( `${ api_prefix }/days`, { preHandler: authenticate_request }, async request => ( {
+        days: runtime.diary.list_days( runtime, request.user ),
+    } ) )
+
     app.get( `${ api_prefix }/days/:date`, { preHandler: authenticate_request }, async request => {
         const local_date = date_schema.parse( request.params.date )
 
@@ -256,7 +260,7 @@ export async function register_routes( app, runtime ) {
 
         if( !media ) return reply.code( 404 ).send( { error: `media_not_found` } )
 
-        return send_media( request, reply, media.target, media.item.mime )
+        return send_media( request, reply, await playback_target( runtime, request, media ), media.item.mime )
     } )
 
     app.patch( `${ api_prefix }/items/:item_id/text`, unsafe, async request => {

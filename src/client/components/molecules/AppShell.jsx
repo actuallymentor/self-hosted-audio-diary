@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react"
+import React, { useEffect, useState } from "react"
 import { CalendarDays, Download, LogOut, Menu, Mic, RefreshCw, Search, Settings, Sparkles, X } from "lucide-react"
 import toast from "react-hot-toast"
 import { NavLink, useLocation } from "react-router-dom"
@@ -7,6 +7,7 @@ import styled from "styled-components"
 import { api } from "../../modules/api/client.js"
 import { use_pwa } from "../../stores/pwa.js"
 import { use_session } from "../../stores/session.js"
+import { outside, use_native_dialog } from "./Modal.jsx"
 
 const destinations = [
     { to: `/`, label: `Today`, icon: Mic, end: true },
@@ -18,7 +19,7 @@ const destinations = [
 const Frame = styled.div`
   margin: 0 auto;
   max-width: 62rem;
-  min-height: 100vh;
+  min-height: 100dvh;
   padding: 0 1rem 2rem;
 
   /* Keep content clear of the bottom tab bar */
@@ -123,23 +124,38 @@ const TabBar = styled.nav`
   @media (min-width: 48rem) { display: none; }
 `
 
-const MenuPanel = styled.div`
+// Native modal dialog sliding in from the right: focus, Escape and inert background come free
+const Drawer = styled.dialog`
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: .75rem;
+  border: 0;
+  border-left: 1px solid var(--border);
   box-shadow: var(--shadow);
-  display: grid;
-  min-width: 14rem;
-  padding: .4rem;
-  position: absolute;
-  right: 0;
-  top: calc(100% - .25rem);
-  z-index: 30;
+  color: var(--ink);
+  height: 100dvh;
+  inset: 0 0 0 auto;
+  margin: 0;
+  max-height: none;
+  max-width: calc(100vw - 3rem);
+  padding: 0 1rem calc(1rem + env(safe-area-inset-bottom));
+  width: 20rem;
 
-  &[hidden] { display: none; }
-  &:not([hidden]) { animation: shad-fade 160ms ease both; }
+  &[open] { animation: drawer-in 320ms var(--ease-out) both; display: flex; flex-direction: column; }
+  &[data-closing] { animation: drawer-out 200ms ease-in both; }
+  &::backdrop { background: rgb(0 20 26 / 45%); }
+  &[open]::backdrop { animation: shad-fade 320ms var(--ease-out) both; }
+  &[data-closing]::backdrop { animation: shad-fade 200ms ease-in reverse both; }
 
-  a, button {
+  @keyframes drawer-in { from { transform: translateX(100%); } to { transform: none; } }
+  @keyframes drawer-out { from { transform: none; } to { transform: translateX(100%); } }
+
+  /* Close sits exactly where the trigger was */
+  header { align-items: center; display: flex; flex: none; justify-content: space-between; min-height: 4rem; }
+  h2 { font-size: 1.05rem; margin: 0; padding-left: .75rem; }
+
+  nav { display: grid; gap: .15rem; }
+  .end { margin-top: auto; }
+
+  nav a, nav button {
     align-items: center;
     background: transparent;
     border: 0;
@@ -157,10 +173,9 @@ const MenuPanel = styled.div`
     width: 100%;
   }
 
-  button::before { inset: 0; }
-  a:hover, button:hover:not(:disabled), a.active { background: var(--hover); transform: none; }
-  svg { color: var(--muted); }
-  hr { border: 0; border-top: 1px solid var(--border); margin: .35rem 0; width: 100%; }
+  nav button::before { inset: 0; }
+  nav a:hover, nav button:hover:not(:disabled), nav a.active { background: var(--hover); transform: none; }
+  nav svg { color: var(--muted); }
 `
 
 const MenuButton = styled.button`
@@ -196,34 +211,12 @@ const icon = { 'aria-hidden': true, strokeWidth: 1.5 }
 export function AppShell( { children } ) {
 
     const [ menu_open, set_menu_open ] = useState( false )
-    const menu_button = useRef( null )
-    const menu_panel = useRef( null )
+    const { closing, dialog: drawer } = use_native_dialog( menu_open )
     const { pathname } = useLocation()
     const clear = use_session( state => state.clear )
     const { install, install_prompt, need_refresh, update } = use_pwa()
 
     useEffect( () => set_menu_open( false ), [ pathname ] )
-
-    // Outside click/tap closes the menu
-    useEffect( () => {
-
-        if( !menu_open ) return undefined
-
-        const outside = event => {
-            if( menu_panel.current?.contains( event.target ) || menu_button.current?.contains( event.target ) ) return
-            set_menu_open( false )
-        }
-        document.addEventListener( `pointerdown`, outside )
-
-        return () => document.removeEventListener( `pointerdown`, outside )
-
-    }, [ menu_open ] )
-
-    function close_menu( event ) {
-        if( event.key !== `Escape` || !menu_open ) return
-        set_menu_open( false )
-        menu_button.current?.focus()
-    }
 
     async function sign_out() {
         try {
@@ -235,7 +228,7 @@ export function AppShell( { children } ) {
     }
 
     return <Frame>
-        <Header onKeyDown={ close_menu }>
+        <Header>
             <NavLink className="brand" to="/">SHAD</NavLink>
 
             <TopNavigation aria-label="Primary navigation">
@@ -248,22 +241,41 @@ export function AppShell( { children } ) {
                 aria-controls="app-menu"
                 aria-expanded={ menu_open }
                 aria-label={ need_refresh ? `Menu, update ready` : `Menu` }
-                onClick={ () => set_menu_open( !menu_open ) }
-                ref={ menu_button }
+                onClick={ () => set_menu_open( true ) }
                 type="button"
             >
-                { menu_open ? <X size={ 20 } { ...icon } /> : <Menu size={ 20 } { ...icon } /> }
+                <Menu size={ 20 } { ...icon } />
                 { need_refresh && <UpdateDot aria-hidden="true" /> }
             </MenuButton>
+        </Header>
 
-            <MenuPanel hidden={ !menu_open } id="app-menu" onClick={ event => event.target.closest( `a` ) && set_menu_open( false ) } ref={ menu_panel }>
+        <Drawer
+            aria-label="Menu"
+            data-closing={ closing || undefined }
+            id="app-menu"
+            onCancel={ event => {
+                event.preventDefault()
+                set_menu_open( false )
+            } }
+            onClick={ event => {
+                const backdrop = event.target === drawer.current && outside( drawer.current, event )
+                if( backdrop || event.target.closest( `a` ) ) set_menu_open( false )
+            } }
+            ref={ drawer }
+        >
+            <header>
+                <h2>Menu</h2>
+                <MenuButton aria-label="Close menu" onClick={ () => set_menu_open( false ) } type="button"><X size={ 20 } { ...icon } /></MenuButton>
+            </header>
+            <nav aria-label="Secondary navigation">
                 <NavLink to="/settings"><Settings size={ 16 } { ...icon } />Settings</NavLink>
                 { need_refresh && <button onClick={ () => update( true ) } type="button"><RefreshCw size={ 16 } { ...icon } />Update ready · reload</button> }
                 { install_prompt && <button onClick={ install } type="button"><Download size={ 16 } { ...icon } />Install app</button> }
-                <hr />
+            </nav>
+            <nav aria-label="Account" className="end">
                 <button onClick={ sign_out } type="button"><LogOut size={ 16 } { ...icon } />Sign out</button>
-            </MenuPanel>
-        </Header>
+            </nav>
+        </Drawer>
 
         <Page key={ pathname }>{ children }</Page>
 

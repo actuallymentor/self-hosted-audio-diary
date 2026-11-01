@@ -187,3 +187,32 @@ test( `serializes concurrent writes to one human-readable day`, async t => {
     assert.equal( responses.every( response => response.response.ok ), true )
     assert.equal( day.result.items.length, 12 )
 } )
+
+test( `lists only days holding live entries, newest first`, async t => {
+    const server = await start_test_server()
+    t.after( () => server.close() )
+    const { client } = await bootstrap_client( server.base_url )
+    const add = ( local_date, item_id ) => client.request( `/api/v1/days/${ local_date }/text`, {
+        json: {
+            capture: { local_date, offset_minutes: 0, timezone: `UTC`, utc: `${ local_date }T12:00:00.000Z` },
+            item_id,
+            text: `Entry`,
+        },
+        method: `POST`,
+    } )
+    const removed = crypto.randomUUID()
+
+    await add( `2026-01-05`, crypto.randomUUID() )
+    await add( `2026-06-05`, crypto.randomUUID() )
+    await add( `2026-06-05`, crypto.randomUUID() )
+    await add( `2026-08-05`, removed )
+    await client.request( `/api/v1/days/2026-03-03/tags`, { json: { tags: [ `tag-only` ] }, method: `PUT` } )
+    await client.request( `/api/v1/items/${ removed }`, { method: `DELETE` } )
+
+    const { result } = await client.request( `/api/v1/days` )
+
+    assert.deepEqual( result.days, [
+        { item_count: 2, local_date: `2026-06-05` },
+        { item_count: 1, local_date: `2026-01-05` },
+    ] )
+} )

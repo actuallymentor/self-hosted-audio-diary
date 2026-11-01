@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.6.0] - 2026-11-01
+
+### Added
+
+- Add a jump-to-date control that lands on the closest day with entries.
+- Add `GET /api/v1/days`, an index of days holding live entries.
+
+### Changed
+
+- Replace day-by-day Calendar paging with a feed of days holding entries.
+- Replace the pop-out menu with a slide-in drawer.
+- Lock the installed PWA to portrait; iOS ignores this manifest setting.
+- Move day tags into a per-day dialog; show saved tags on each day.
+- Show recording status pills only when something needs attention.
+- Show readable dates and entry types in search results.
+
+### Fixed
+
+- Fix missing duration, progress and seeking on recorded WebM audio.
+- Pause other players when a new recording starts.
+- Scroll search results to the matching entry without a full page reload.
+
 ## [0.5.0] - 2026-10-05
 
 ### Added

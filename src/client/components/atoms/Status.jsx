@@ -29,7 +29,7 @@ const states = {
     local_present: [ `On this device`, `info`, HardDrive ],
     needs_auth: [ `Sign in to sync`, `warn`, TriangleAlert ],
     not_queued: [ `Transcript not queued`, `neutral`, Clock ],
-    queued: [ `Queued`, `info`, Clock ],
+    queued: [ `Transcript queued`, `info`, Clock ],
     recording: [ `Recording`, `danger`, Mic ],
     remote_absent: [ `Not yet on server`, `warn`, CloudOff ],
     remote_unknown: [ `Server status unavailable`, `neutral`, CloudOff ],

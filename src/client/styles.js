@@ -84,6 +84,9 @@ export const GlobalStyle = createGlobalStyle`
 
   html, body, #root { min-height: 100%; }
 
+  /* Open dialogs freeze the page behind them */
+  html:has(dialog[open]) { overflow: hidden; }
+
   body {
     background: var(--page);
     color: var(--ink);

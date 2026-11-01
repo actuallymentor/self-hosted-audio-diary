@@ -59,3 +59,14 @@
 - Animated artwork appears only on sign-in and empty states, never near Record.
 - Not verified: real touch hardware (long-press was CDP-emulated), install prompt,
   update-ready indicator, physical haptics/sounds.
+
+## 2026-11-01 — design audit decisions (review)
+
+- Calendar is a feed; chose it over date-picker paging. Day-arrow navigation removed.
+  Route and label stay `/calendar` / Calendar so links and habits keep working.
+- Status pills hide on settled recordings (on server, transcribed, not on device).
+  This narrows the 2026-09-04 always-explicit per-recording state; exceptions still show.
+- Portrait lock only binds installed Android/desktop PWAs. iOS and plain browser tabs
+  have no web API for it. An installed Android app may need a reinstall or a manifest
+  refresh before it applies.
+- Not verified: real touch hardware, physical Android portrait lock.

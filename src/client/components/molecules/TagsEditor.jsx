@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react"
+import React, { useEffect, useId, useRef, useState } from "react"
 import { Check, TriangleAlert } from "lucide-react"
 import styled from "styled-components"
 
@@ -9,7 +9,7 @@ import { Modal, ModalActions } from "./Modal.jsx"
 const Form = styled.form`
   display: grid;
   gap: .5rem;
-  margin: 0 0 1.5rem;
+  margin: 0;
 
   .row { align-items: center; display: flex; gap: .5rem; }
   footer { display: flex; flex-wrap: wrap; gap: .75rem; justify-content: flex-end; }
@@ -71,6 +71,7 @@ export function TagsEditor( { initial, on_save } ) {
     const [ paused, set_paused ] = useState( false )
     const [ failure, set_failure ] = useState( null )
     const typing = useRef( null )
+    const input_id = useId()
     const dirty = value !== baseline
 
     // Adopt refreshed server values only while there are no local edits
@@ -118,10 +119,10 @@ export function TagsEditor( { initial, on_save } ) {
 
     return <Form onSubmit={ save }>
         <div className="row">
-            <label htmlFor="day-tags">Day tags</label>
+            <label htmlFor={ input_id }>Day tags</label>
             { dirty && <Badge>Unsaved</Badge> }
         </div>
-        <input id="day-tags" name="tags" onChange={ event => edit( event.target.value ) } placeholder="family, health, idea" value={ value } />
+        <input data-autofocus id={ input_id } name="tags" onChange={ event => edit( event.target.value ) } placeholder="family, health, idea" value={ value } />
 
         <Banner $open={ dirty } aria-hidden={ !dirty }>
             <div><p><TriangleAlert aria-hidden="true" size={ 16 } strokeWidth={ 1.5 } />Unsaved changes to this day’s tags.</p></div>

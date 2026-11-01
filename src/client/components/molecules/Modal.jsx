@@ -44,7 +44,7 @@ export const ModalActions = styled.div`
 `
 
 // Backdrop clicks target the dialog itself but land outside its box
-function outside( element, { clientX: x, clientY: y } ) {
+export function outside( element, { clientX: x, clientY: y } ) {
     const { bottom, left, right, top } = element.getBoundingClientRect()
     return x < left || x > right || y < top || y > bottom
 }
@@ -58,21 +58,16 @@ function focus_preferred( dialog ) {
 }
 
 /**
- * Native modal dialog: focus containment, Escape, inert background and focus return come from <dialog>.
+ * Mirror an open prop onto a native <dialog>, holding it open during its exit animation.
  *
- * @param {object} props
- * @param {boolean} props.open
- * @param {Function} props.on_close - Called on Escape, backdrop or close button
- * @param {string} props.title
- * @returns {React.ReactElement}
+ * @param {boolean} open
+ * @returns {{ closing: boolean, dialog: React.RefObject }}
  */
-export function Modal( { children, on_close, open, title } ) {
+export function use_native_dialog( open ) {
 
     const dialog = useRef( null )
     const [ closing, set_closing ] = useState( false )
-    const title_id = useId()
 
-    // Mirror the open prop onto the native dialog, animating the exit
     useEffect( () => {
 
         const element = dialog.current
@@ -100,6 +95,24 @@ export function Modal( { children, on_close, open, title } ) {
         return () => clearTimeout( timer )
 
     }, [ open ] )
+
+    return { closing, dialog }
+
+}
+
+/**
+ * Native modal dialog: focus containment, Escape, inert background and focus return come from <dialog>.
+ *
+ * @param {object} props
+ * @param {boolean} props.open
+ * @param {Function} props.on_close - Called on Escape, backdrop or close button
+ * @param {string} props.title
+ * @returns {React.ReactElement}
+ */
+export function Modal( { children, on_close, open, title } ) {
+
+    const { closing, dialog } = use_native_dialog( open )
+    const title_id = useId()
 
     return <Dialog
         aria-labelledby={ title_id }

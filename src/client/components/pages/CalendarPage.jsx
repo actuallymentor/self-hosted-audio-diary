@@ -1,40 +1,51 @@
-import React, { useCallback, useEffect, useRef, useState } from "react"
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useLiveQuery } from "dexie-react-hooks"
-import { ChevronLeft, ChevronRight, RotateCcw } from "lucide-react"
-import { StringParam, useQueryParam, withDefault } from "use-query-params"
+import { ArrowUp, ChevronDown, ChevronUp, CloudOff, RotateCcw } from "lucide-react"
+import { Link } from "react-router-dom"
+import { StringParam, useQueryParam } from "use-query-params"
 import styled from "styled-components"
 
-import { shift_day } from "../../../shared/diary_dates.js"
 import { api } from "../../modules/api/client.js"
-import { current_capture } from "../../modules/recorder/recorder.js"
-import { as_sentence } from "../../modules/text.js"
+import { as_sentence, format_day } from "../../modules/text.js"
 import { list_local_recordings } from "../../modules/storage/database.js"
 import { use_session } from "../../stores/session.js"
 import { Button } from "../atoms/Button.jsx"
 import { Skeleton } from "../atoms/Skeleton.jsx"
+import { DaySection } from "../molecules/DaySection.jsx"
+import { EmptyState } from "../molecules/EmptyState.jsx"
 import { Modal, ModalActions } from "../molecules/Modal.jsx"
-import { TagsEditor } from "../molecules/TagsEditor.jsx"
-import { Timeline } from "../molecules/Timeline.jsx"
 
-const Navigation = styled.div`
+const DAYS_PER_PAGE = 7
+
+// Stays reachable while scrolling, so a jump never means scrolling back up first
+const JumpBar = styled.div`
   align-items: end;
+  background: var(--page);
   display: flex;
-  flex-wrap: wrap;
-  gap: .75rem 1rem;
-  margin-bottom: 1.5rem;
+  gap: .75rem;
+  margin: 0 -1rem 1rem;
+  padding: .5rem 1rem .75rem;
+  position: sticky;
+  top: 0;
+  z-index: 10;
 
-  label { display: grid; flex: 0 1 14rem; gap: .35rem; }
+  label { display: grid; flex: 0 1 14rem; gap: .25rem; min-width: 0; }
   input { min-width: 0; }
-
-  /* Step controls stay together; faces align with the 44px field */
-  .steps { display: flex; gap: .75rem; padding-bottom: .375rem; }
+  button { margin-bottom: .375rem; }
 `
 
-const Retry = styled.div`
-  margin-bottom: 1rem;
+const More = styled.div`
+  display: flex;
+  justify-content: center;
+  margin: 0 0 1.5rem;
 `
 
 const Notice = styled.p`
+  color: var(--muted);
+  margin: 0 0 1rem;
+`
+
+const Invalid = styled( Notice )`
   color: var(--warn-ink);
 `
 
@@ -46,141 +57,180 @@ function valid_date( value ) {
     return !Number.isNaN( instant.getTime() ) && instant.toISOString().slice( 0, 10 ) === value
 }
 
+// Equidistant days resolve to the older one, since a feed reads forward through time
+function closest_date( dates, target ) {
+
+    const distance = date => Math.abs( Date.parse( `${ date }T00:00:00Z` ) - Date.parse( `${ target }T00:00:00Z` ) )
+
+    return dates.reduce( ( best, date ) => distance( date ) <= distance( best ) ? date : best )
+
+}
+
 /**
- * Navigate historical days with a shareable date query.
+ * Keep loading older days as the end of the feed scrolls near.
+ *
+ * @param {Function} load_more
+ * @returns {React.RefCallback} Attach to the "older" control
+ */
+function use_near_end( load_more ) {
+
+    const observer = useRef( null )
+
+    return useCallback( element => {
+
+        observer.current?.disconnect()
+        if( !element ) return
+
+        observer.current = new IntersectionObserver( ( [ { isIntersecting } ] ) => isIntersecting && load_more(), { rootMargin: `400px` } )
+        observer.current.observe( element )
+
+    }, [ load_more ] )
+
+}
+
+/**
+ * A feed of days that hold entries, newest first. Empty dates simply do not exist
+ * here; jumping to any date lands on the closest day with entries.
  *
  * @returns {React.ReactElement}
  */
 export default function CalendarPage() {
+
     const user = use_session( state => state.user )
-    const today = current_capture().local_date
-    const [ requested_date, set_date ] = useQueryParam( `date`, withDefault( StringParam, today ) )
-    const date = valid_date( requested_date ) ? requested_date : today
+    const [ requested_date, set_date ] = useQueryParam( `date`, StringParam )
+    const [ index, set_index ] = useState( { dates: [], settled: false, unavailable: false } )
+    const [ pages, set_pages ] = useState( { key: null, newer: 0, older: 1 } )
     const [ load_failure, set_load_failure ] = useState( null )
-    const active_date = useRef( date )
-    const refresh_generation = useRef( 0 )
-    const [ remote, set_remote ] = useState( {
-        date: null,
-        day: null,
-        loaded: false,
-        settled: false,
-        unavailable: false,
-    } )
-    const selected = remote.date === date ? remote : {
-        day: null,
-        loaded: false,
-        settled: false,
-        unavailable: false,
-    }
-    const { day } = selected
+    const [ attempt, set_attempt ] = useState( 0 )
+    const index_generation = useRef( 0 )
+    const local_recordings = useLiveQuery( () => list_local_recordings( user.id ), [ user.id ], [] )
 
-    active_date.current = date
+    const load_index = useCallback( async ( { quiet = false } = {} ) => {
 
-    const local_recordings = useLiveQuery(
-        () => list_local_recordings( user.id ),
-        [ user.id ],
-        [],
-    ).filter( recording => recording.capture.local_date === date )
-    const refresh = useCallback( async ( { invalidate = false, quiet = false } = {} ) => {
-        const generation = refresh_generation.current + 1
-
-        refresh_generation.current = generation
-
-        if( invalidate ) {
-            set_remote( current => current.date === date
-                ? { ...current, loaded: false, unavailable: false }
-                : current
-            )
-        }
+        const generation = index_generation.current + 1
+        index_generation.current = generation
 
         try {
-            const next = await api( `/days/${ date }` )
-
-            if( active_date.current === date && refresh_generation.current === generation ) {
-                set_remote( {
-                    date,
-                    day: next,
-                    loaded: true,
-                    settled: true,
-                    unavailable: false,
-                } )
-            }
+            const { days } = await api( `/days` )
+            if( index_generation.current === generation ) set_index( { dates: days.map( ( { local_date } ) => local_date ), settled: true, unavailable: false } )
         } catch ( error ) {
-            if( active_date.current !== date || refresh_generation.current !== generation ) return
-
-            set_remote( current => ( {
-                date,
-                day: current.date === date ? current.day : null,
-                loaded: false,
-                settled: true,
-                unavailable: true,
-            } ) )
+            if( index_generation.current !== generation ) return
+            set_index( current => ( { ...current, settled: true, unavailable: true } ) )
             if( !quiet && navigator.onLine ) set_load_failure( error.message ?? `The server did not respond.` )
         }
-    }, [ date ] )
+
+    }, [] )
 
     useEffect( () => {
-        void refresh()
-    }, [ refresh ] )
+        void load_index()
+    }, [ attempt, load_index ] )
 
     useEffect( () => {
-        const synchronized = () => void refresh( { invalidate: true, quiet: true } )
+
+        const synchronized = () => void load_index( { quiet: true } )
 
         window.addEventListener( `shad:synchronized`, synchronized )
         return () => window.removeEventListener( `shad:synchronized`, synchronized )
-    }, [ refresh ] )
 
-    useEffect( () => {
-        const waiting = day?.items.some( item =>
-            [ `queued`, `transcribing` ].includes( item.recording_status?.transcription )
-        )
+    }, [ load_index ] )
 
-        if( !waiting ) return undefined
+    // Audio still on this device belongs in the feed even before the server knows it
+    const pending_audio = local_recordings.filter( recording =>
+        ( recording.item_type ?? `audio` ) === `audio` && ( recording.status !== `uploaded` || index.unavailable )
+    )
+    const pending_dates = pending_audio.map( ( { capture } ) => capture.local_date ).join()
+    const dates = useMemo( () =>
+        [ ...new Set( [ ...index.dates, ...pending_dates.split( `,` ).filter( Boolean ) ] ) ].sort().reverse()
+    , [ index.dates, pending_dates ] )
 
-        const timer = setInterval( () => {
-            void refresh( { quiet: true } )
-        }, 5_000 )
+    const invalid = Boolean( requested_date ) && !valid_date( requested_date )
+    const target = requested_date && !invalid ? requested_date : null
+    const anchor = target && dates.length ? closest_date( dates, target ) : dates[0]
+    const anchor_index = Math.max( dates.indexOf( anchor ), 0 )
 
-        return () => clearInterval( timer )
-    }, [ day?.items, refresh ] )
+    // Paging is relative to the jump target; a new jump starts a fresh window
+    const { newer, older } = pages.key === target ? pages : { newer: 0, older: 1 }
+    const first = Math.max( anchor_index - newer * DAYS_PER_PAGE, 0 )
+    const last = anchor_index + older * DAYS_PER_PAGE
+    const visible = dates.slice( first, last )
+    const has_older = last < dates.length
 
-    async function save_tags( tags ) {
-        await api( `/days/${ date }/tags`, { json: { tags }, method: `PUT` } )
-        await refresh()
+    // `last` is a dependency so each new page re-arms the observer if the end is still in view
+    const show_older = useCallback( () => set_pages( current => {
+        const base = current.key === target ? current : { key: target, newer: 0, older: 1 }
+        return { ...base, older: base.older + 1 }
+    } ), [ target, last ] )
+    const older_control = use_near_end( show_older )
+
+    function show_newer() {
+        set_pages( { key: target, newer: newer + 1, older } )
     }
+
+    // The jump bar is sticky, so a jump can start deep in the feed
+    const landed = useRef( target )
+    useEffect( () => {
+        if( landed.current !== target ) window.scrollTo( 0, 0 )
+        landed.current = target
+    }, [ target ] )
+
+    // A feed holds many players; starting one pauses the rest. Media events do not bubble, so capture
+    useEffect( () => {
+
+        const pause_others = ( { target: playing } ) => document.querySelectorAll( `audio, video` ).forEach( media => media !== playing && media.pause() )
+
+        document.addEventListener( `play`, pause_others, true )
+        return () => document.removeEventListener( `play`, pause_others, true )
+
+    }, [] )
 
     function retry() {
         set_load_failure( null )
-        void refresh()
+        set_attempt( attempt + 1 )
     }
+
+    const fail_day = useCallback( message => set_load_failure( message ), [] )
+    const refresh_index = useCallback( () => void load_index( { quiet: true } ), [ load_index ] )
 
     return <main>
         <h2>Calendar</h2>
-        <Navigation>
-            <label>Diary date
+
+        <JumpBar>
+            <label>Jump to date
                 <input max="9999-12-31" min="0001-01-01" onChange={ event => {
                     if( valid_date( event.target.value ) ) set_date( event.target.value )
-                } } type="date" value={ date }
+                } } type="date" value={ target ?? `` }
                 />
             </label>
-            <div className="steps">
-                <Button aria-label="Previous day" disabled={ date === `0001-01-01` } icon={ ChevronLeft } onClick={ () => set_date( shift_day( date, -1 ) ) } />
-                <Button aria-label="Next day" disabled={ date === `9999-12-31` } icon={ ChevronRight } onClick={ () => set_date( shift_day( date, 1 ) ) } />
-                <Button disabled={ date === today } onClick={ () => set_date( current_capture().local_date ) }>Today</Button>
-            </div>
-        </Navigation>
-        { !valid_date( requested_date ) && <Notice role="status">Invalid diary date. Showing today.</Notice> }
-        { selected.loaded && <TagsEditor initial={ day.tags.join( `, ` ) } key={ date } on_save={ save_tags } /> }
-        { selected.unavailable && <Retry><Button icon={ RotateCcw } onClick={ retry }>Retry loading day</Button></Retry> }
-        { !selected.settled ? <Skeleton label="Loading your day…" /> : <Timeline
-            items={ day?.items ?? [] }
-            local_recordings={ local_recordings }
-            on_changed={ refresh }
-            remote_loaded={ selected.loaded }
-            remote_unavailable={ selected.unavailable }
-        /> }
+            <Button disabled={ !requested_date } icon={ ArrowUp } onClick={ () => set_date( undefined ) }>Latest</Button>
+        </JumpBar>
 
-        <Modal on_close={ () => set_load_failure( null ) } open={ Boolean( load_failure ) } title="Day not loaded">
+        { invalid && <Invalid role="status">Invalid diary date. Showing the latest entries.</Invalid> }
+        { target && anchor && anchor !== target && <Notice role="status">Nothing on { format_day( target ) }. Showing the closest day.</Notice> }
+
+        { !index.settled && <Skeleton label="Loading your diary…" /> }
+
+        { index.settled && !dates.length && ( index.unavailable
+            ? <EmptyState action={ <Button icon={ RotateCcw } onClick={ retry }>Retry</Button> } heading="Your diary could not be loaded" icon={ CloudOff }>
+                Try again when the server is available.
+            </EmptyState>
+            : <EmptyState action={ <Link to="/">Record an entry</Link> } artwork heading="No entries yet">
+                Your diary can start with one thought.
+            </EmptyState> ) }
+
+        { first > 0 && <More><Button icon={ ChevronUp } onClick={ show_newer }>Show newer days</Button></More> }
+
+        { visible.map( date => <DaySection
+            attempt={ attempt }
+            date={ date }
+            key={ date }
+            local_recordings={ local_recordings.filter( recording => recording.capture.local_date === date ) }
+            on_changed={ refresh_index }
+            on_failure={ fail_day }
+        /> ) }
+
+        { has_older && <More ref={ older_control }><Button icon={ ChevronDown } onClick={ show_older }>Show older days</Button></More> }
+
+        <Modal on_close={ () => set_load_failure( null ) } open={ Boolean( load_failure ) } title="Diary not loaded">
             <p>{ load_failure && as_sentence( load_failure ) } Entries saved on this device stay visible.</p>
             <ModalActions>
                 <Button onClick={ () => set_load_failure( null ) }>Close</Button>
@@ -188,4 +238,5 @@ export default function CalendarPage() {
             </ModalActions>
         </Modal>
     </main>
+
 }

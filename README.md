@@ -4,7 +4,7 @@ Private voice journaling with offline recording, resumable uploads, local
 multilingual transcription, search, reflections, and ordinary files you can back
 up without SHAD.
 
-Status: `0.5.0` preview. Images support `linux/amd64` and `linux/arm64`. Physical
+Status: `0.6.0` preview. Images support `linux/amd64` and `linux/arm64`. Physical
 iPhone and Android validation remains required before `1.0.0`.
 
 ## Requirements
@@ -26,7 +26,7 @@ name: shad
 
 services:
   app:
-    image: actuallymentor/self-hosted-audio-diary:0.5.0
+    image: actuallymentor/self-hosted-audio-diary:0.6.0
     restart: unless-stopped
     init: true
     ports:
@@ -62,7 +62,7 @@ services:
         condition: service_started
 
   transcriber:
-    image: actuallymentor/self-hosted-audio-diary-transcriber:0.5.0
+    image: actuallymentor/self-hosted-audio-diary-transcriber:0.6.0
     restart: unless-stopped
     init: true
     environment:
@@ -128,7 +128,8 @@ Settings.
 - Press Record, speak, then stop. Every audio row shows whether its bytes are on
   this device, on the server, queued, transcribing, complete, or failed.
 - Use **+** on Today for a note, photo, or video. Leaving Today stops and saves an active recording.
-- Browse entries and edit day tags in Calendar; use the arrows or Today shortcut.
+- Browse entries in the Calendar feed; empty days are skipped. Jump to any date to
+  land on the closest day with entries. Edit tags per day.
 - Search diary text, transcripts, and tags.
 - Reflect over Week (default), Month, Quarter, Year, or Custom. Presets include today;
   Week covers seven days, longer periods use calendar months with month-end clamping.
@@ -136,7 +137,7 @@ Settings.
 - Adjust reading size and spacing in Settings with live values, default markers,
   resets, and a reading preview. Preferences persist on this browser.
 - Navigate with bottom tabs on mobile or the top bar on desktop. Settings, Install,
-  Update, and Sign out live in the top-right menu.
+  Update, and Sign out live in the top-right slide-in menu.
 - Edit or delete entries from their compact icon actions. Hover or focus reveals the
   label; on touch, press and hold to read it without acting.
 - Light and dark themes follow the device setting.

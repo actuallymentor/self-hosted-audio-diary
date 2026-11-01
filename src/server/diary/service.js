@@ -5,10 +5,28 @@ import path from "node:path"
 import { atomic_write, pretty_json } from "../archive/atomic_write.js"
 import { day_paths, read_day, update_day } from "../archive/day_store.js"
 import { confined_path, user_root } from "../archive/paths.js"
+import { remove_playback } from "../http/media.js"
 import { normalize_capture } from "../../shared/time.js"
 
 function time_prefix( utc ) {
     return new Date( utc ).toISOString().slice( 11, 23 ).replaceAll( `:`, `-` )
+}
+
+/**
+ * List only the days holding live entries, newest first, so views never walk empty dates.
+ *
+ * @param {object} runtime
+ * @param {object} user
+ * @returns {Array<{ local_date: string, item_count: number }>}
+ */
+export function list_days( runtime, user ) {
+    return runtime.database.prepare( `
+        SELECT days.local_date, COUNT(*) AS item_count
+        FROM items JOIN days ON days.id = items.day_id
+        WHERE items.user_id = ? AND items.deleted_at IS NULL
+        GROUP BY days.local_date
+        ORDER BY days.local_date DESC
+    ` ).all( user.id )
 }
 
 /**
@@ -465,6 +483,7 @@ export async function trash_item( runtime, user, item_id ) {
         runtime.database.prepare( `UPDATE items SET deleted_at = ? WHERE id = ?` ).run( deleted_at.getTime(), item_id )
         runtime.database.prepare( `DELETE FROM search_documents WHERE user_id = ? AND item_id = ?` ).run( user.id, item_id )
     } )()
+    await remove_playback( runtime, item_id )
 
     return { deleted_at: deleted_at.toISOString(), id: item_id, tombstone_id }
 }

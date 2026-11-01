@@ -30,7 +30,7 @@
 - Deploy recipe (verified 2026-10-06 for 0.5.0): sibling `docker:cli` container with the host Compose
   directory bind-mounted read-only, project `docker-composition`, all label-listed
   `-f` files; `pull` then `up -d --no-deps audio-diary audio-diary-transcriber`.
-  Transcriber restart reloads `large-v3` and spikes host CPU; ask before deploying.
+  Transcriber restart reloads `large-v3` and spikes host CPU; deploy only with owner approval.
   Confirm `latest` digests match the version tag before pulling.
 
 ## Local verification

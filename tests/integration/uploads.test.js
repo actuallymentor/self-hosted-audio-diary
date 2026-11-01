@@ -237,3 +237,61 @@ test( `expires only stale incomplete staging and retains client-retry semantics`
     assert.equal( removed, 1 )
     assert.equal( status.response.status, 404 )
 } )
+
+test( `serves a seekable playback copy of live WebM and keeps the original intact`, async t => {
+    const server = await start_test_server()
+    t.after( () => server.close() )
+    const { client } = await bootstrap_client( server.base_url )
+    const target = path.join( server.root, `live.webm` )
+
+    // A piped muxer cannot seek back, leaving no duration or cues, exactly like MediaRecorder
+    await execute_file( `sh`, [ `-c`, `ffmpeg -nostdin -loglevel error -f lavfi -i sine=frequency=440:duration=2 -c:a libopus -f webm pipe:1 | cat > "${ target }"` ] )
+
+    const bytes = await fs.readFile( target )
+    const digest = createHash( `sha256` ).update( bytes ).digest( `hex` )
+    const upload_id = crypto.randomUUID()
+
+    await client.request( `/api/v1/uploads`, {
+        json: {
+            capture: { local_date: `2026-08-25`, offset_minutes: 0, timezone: `UTC`, utc: `2026-08-25T12:00:00.000Z` },
+            item_type: `audio`,
+            mime: `audio/webm`,
+            upload_id,
+        },
+        method: `POST`,
+    } )
+    await client.request( `/api/v1/uploads/${ upload_id }/chunks/0`, {
+        body: bytes,
+        headers: {
+            [`Content-Length`]: String( bytes.length ),
+            [`Content-Type`]: `application/octet-stream`,
+            [`X-Content-SHA256`]: digest,
+        },
+        method: `PUT`,
+    } )
+    await client.request( `/api/v1/uploads/${ upload_id }/complete`, {
+        json: { chunk_hashes: [ digest ], total_bytes: bytes.length, whole_sha256: digest },
+        method: `POST`,
+    } )
+
+    // Concurrent range requests share one remux and answer with one consistent file
+    const [ first, second ] = await Promise.all( [ 1, 2 ].map( () =>
+        client.request( `/api/v1/media/${ upload_id }`, { headers: { Range: `bytes=0-99` } } )
+    ) )
+    assert.equal( first.response.status, 206 )
+    assert.equal( first.response.headers.get( `content-range` ), second.response.headers.get( `content-range` ) )
+
+    const copy = path.join( server.config.app_data_path, `playback`, `${ upload_id }.webm` )
+    const { stdout } = await execute_file( `ffprobe`, [ `-v`, `error`, `-show_entries`, `format=duration`, `-of`, `csv=p=0`, copy ] )
+    assert.ok( Number.parseFloat( stdout ) > 1.9 )
+
+    const { result: { items: [ item ] } } = await client.request( `/api/v1/days/2026-08-25` )
+    const { diary_data_path } = server.config
+    const [ original ] = await fs.readdir( diary_data_path, { recursive: true } )
+        .then( files => files.filter( file => file.endsWith( `${ upload_id }.webm` ) ) )
+    const archived = await fs.readFile( path.join( diary_data_path, original ) )
+    assert.equal( createHash( `sha256` ).update( archived ).digest( `hex` ), item.sha256 )
+
+    await client.request( `/api/v1/items/${ upload_id }`, { method: `DELETE` } )
+    await assert.rejects( fs.access( copy ) )
+} )

@@ -65,3 +65,13 @@
   context into the prompt for external reviews.
 - E2E runs locally without the transcriber: start a fresh server on a spare port,
   wait for `/version`, then `APP_BASE_URL=… CHROME_HEADLESS=true npm run test:e2e`.
+- Chrome MediaRecorder WebM has no duration or cues (`ffprobe` duration N/A), so
+  `<audio>` reports Infinity. Originals stay byte-identical; playback streams a
+  disposable remux from `APP_DATA/playback`. Do not "fix" the archive file.
+- `scrollbar-gutter: stable` insets native dialogs from the right edge; it breaks
+  the flush drawer.
+- The app menu is a modal `<dialog>` with a 200ms exit. The page stays inert until it
+  closes, so e2e clicks must wait for `#app-menu[open]` to disappear.
+- Plain `docker` lacks socket permission for `node`; use `sudo -n docker`.
+- The agent container has no ffmpeg by default; `apt-get update` then install it
+  before integration tests.

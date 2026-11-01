@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from "react"
 import { CloudOff, RotateCcw, Search, SearchX } from "lucide-react"
+import { Link } from "react-router-dom"
 import { StringParam, useQueryParam, withDefault } from "use-query-params"
 import styled from "styled-components"
 
 import { api } from "../../modules/api/client.js"
+import { format_day } from "../../modules/text.js"
 import { Button } from "../atoms/Button.jsx"
 import { Skeleton } from "../atoms/Skeleton.jsx"
 import { EmptyState } from "../molecules/EmptyState.jsx"
@@ -45,6 +47,8 @@ const Count = styled.p`
   font-size: .875rem;
   margin: 0 0 .75rem;
 `
+
+const result_types = { audio: `Recording`, text: `Note` }
 
 // Server snippets wrap hits in <mark>; render them as elements, never as HTML
 function Snippet( { text } ) {
@@ -116,10 +120,10 @@ export default function SearchPage() {
                 <Count>{ results.length === 100 ? `First 100 matches` : `${ results.length } ${ results.length === 1 ? `match` : `matches` }` }</Count>
                 <Results>
                     { results.map( result => <li key={ result.item_id }>
-                        <a href={ `/calendar?date=${ result.local_date }#item-${ result.item_id }` }>
-                            <span className="meta">{ result.local_date } · { result.type }</span>
+                        <Link to={ `/calendar?date=${ result.local_date }#item-${ result.item_id }` }>
+                            <span className="meta">{ format_day( result.local_date ) } · { result_types[ result.type ] ?? result.type }</span>
                             <span><Snippet text={ result.snippet } /></span>
-                        </a>
+                        </Link>
                     </li> ) }
                 </Results>
             </> }

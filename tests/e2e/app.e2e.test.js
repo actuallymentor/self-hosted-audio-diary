@@ -245,10 +245,19 @@ test( `real Chrome captures, syncs, searches, and relaunches offline`, {
     await page.waitForFunction( () => !document.body.textContent.includes( `Device outbox` ) )
     await page.waitForFunction( () => [ ...document.querySelectorAll( `li` ) ].some( item =>
         item.querySelector( `audio` )
-        && item.textContent.includes( `Not on this device` )
         && item.textContent.includes( `On server` )
-        && ( item.textContent.includes( `Queued` ) || item.textContent.includes( `Transcribing` ) )
+        && ( item.textContent.includes( `Transcript queued` ) || item.textContent.includes( `Transcribing` ) )
     ) )
+
+    // MediaRecorder WebM has no duration; playback must still show real progress and seek
+    await page.waitForFunction( () => Number.isFinite( document.querySelector( `audio` ).duration ) )
+    const seeked = await page.$eval( `audio`, async audio => {
+        audio.currentTime = audio.duration / 2
+        await new Promise( resolve => audio.addEventListener( `seeked`, resolve, { once: true } ) )
+        return { duration: audio.duration, position: audio.currentTime }
+    } )
+    assert.ok( seeked.duration > 0 && seeked.position > 0 )
+    mark( `recorded audio exposes duration and seeks` )
     assert.equal( dropped_status_requests, 1 )
     assert.equal( chunk_requests, 1 )
     mark( `lost final acknowledgment resumed without re-upload` )
@@ -261,31 +270,28 @@ test( `real Chrome captures, syncs, searches, and relaunches offline`, {
     assert.equal( await page.$eval( `body`, element => element.innerText.includes( `status unavailable` ) ), false )
     mark( `calendar recording state loaded` )
 
-    const empty_date = `2000-01-02`
-    const failed_date = `2000-01-03`
+    // One feed day walks through loading, a quiet refresh, then an explicit failure
+    const feed_date = await page.$eval( `section[data-date]`, element => element.dataset.date )
     const { promise: calendar_request_started, resolve: report_calendar_request } = Promise.withResolvers()
     const { promise: calendar_request_released, resolve: release_calendar_request } = Promise.withResolvers()
     const { promise: calendar_refresh_started, resolve: report_calendar_refresh } = Promise.withResolvers()
     const { promise: calendar_refresh_released, resolve: release_calendar_refresh } = Promise.withResolvers()
-    let empty_requests = 0
+    let day_requests = 0
     const hold_calendar_request = request => {
         const { pathname } = new URL( request.url() )
 
-        if( request.method() === `GET` && pathname.endsWith( `/days/${ empty_date }` ) ) {
-            empty_requests += 1
+        if( request.method() === `GET` && pathname.endsWith( `/days/${ feed_date }` ) ) {
+            day_requests += 1
 
-            if( empty_requests === 1 ) {
+            if( day_requests === 1 ) {
                 report_calendar_request()
                 void calendar_request_released.then( () => request.continue() )
-            } else {
+            } else if( day_requests === 2 ) {
                 report_calendar_refresh()
                 void calendar_refresh_released.then( () => request.continue() )
+            } else {
+                void request.abort( `failed` )
             }
-            return
-        }
-
-        if( request.method() === `GET` && pathname.endsWith( `/days/${ failed_date }` ) ) {
-            void request.abort( `failed` )
             return
         }
 
@@ -294,23 +300,30 @@ test( `real Chrome captures, syncs, searches, and relaunches offline`, {
 
     await page.setRequestInterception( true )
     page.on( `request`, hold_calendar_request )
-    await choose_date( page, empty_date )
+    await click_text( page, `a`, `Search` )
+    await page.waitForSelector( `input[type=search]` )
+    await click_text( page, `a`, `Calendar` )
     await calendar_request_started
     await page.waitForFunction( () => document.body.textContent.includes( `Loading your day…` ) )
     release_calendar_request()
-    await page.waitForFunction( () => document.body.textContent.includes( `No entries yet` ) )
+    await page.waitForSelector( `audio` )
     await page.evaluate( () => window.dispatchEvent( new CustomEvent( `shad:synchronized` ) ) )
     await calendar_refresh_started
-    assert.equal( await page.$eval( `body`, element => element.innerText.includes( `This day could not be loaded` ) ), false )
+    assert.equal( await page.$eval( `body`, element => element.innerText.includes( `Retry loading day` ) ), false )
     release_calendar_refresh()
-    await choose_date( page, failed_date )
-    await page.waitForFunction( () => document.body.textContent.includes( `This day could not be loaded` ) )
+    await page.waitForSelector( `audio` )
+    await click_text( page, `a`, `Search` )
+    await page.waitForSelector( `input[type=search]` )
+    await click_text( page, `a`, `Calendar` )
     await page.waitForSelector( `dialog[open]` )
+    await page.waitForFunction( () => document.body.textContent.includes( `Retry loading day` ) )
     await click_text( page, `dialog[open] button`, `Close` )
     await page.waitForFunction( () => !document.querySelector( `dialog[open]` ) )
     page.off( `request`, hold_calendar_request )
     await page.setRequestInterception( false )
-    mark( `calendar date change distinguishes empty and unavailable state` )
+    await click_text( page, `button`, `Retry loading day` )
+    await page.waitForSelector( `audio` )
+    mark( `feed day distinguishes loading, refresh, and unavailable state` )
 
     await click_text( page, `a`, `Today` )
     assert.equal( await page.$( `textarea[name=note]` ), null )
@@ -514,24 +527,29 @@ test( `real Chrome captures, syncs, searches, and relaunches offline`, {
     await page.waitForSelector( `main img` )
     mark( `photo and video actions uploaded through native file choosers` )
 
-    await page.waitForSelector( `input[name=tags]` )
+    const open_tags = async () => {
+        await page.click( `section[data-date] header button` )
+        await page.waitForSelector( `dialog[open] input[name=tags]`, { visible: true } )
+    }
+    await open_tags()
     await page.type( `input[name=tags]`, `browser, calm` )
     await click_text( page, `button`, `Save tags` )
     await page.waitForFunction( () => document.body.textContent.includes( `Changes saved` ) )
     await page.reload( { waitUntil: `networkidle0` } )
-    assert.equal( await page.$eval( `input[name=tags]`, element => element.value ), `browser, calm` )
+    await open_tags()
+    assert.equal( await page.$eval( `dialog[open] input[name=tags]`, element => element.value ), `browser, calm` )
+    await page.keyboard.press( `Escape` )
+    await page.waitForFunction( () => !document.querySelector( `dialog[open]` ) )
 
-    for( const [ before, after ] of [ [ `2024-12-31`, `2025-01-01` ], [ `2024-02-28`, `2024-02-29` ], [ `2024-02-29`, `2024-03-01` ], [ `2025-03-09`, `2025-03-10` ] ] ) {
-        await choose_date( page, before )
-        await page.click( `button[aria-label="Next day"]` )
-        await page.waitForFunction( expected => document.querySelector( `input[type=date]` ).value === expected, {}, after )
-        assert.equal( new URL( page.url() ).searchParams.get( `date` ), after )
-        await page.click( `button[aria-label="Previous day"]` )
-        await page.waitForFunction( expected => document.querySelector( `input[type=date]` ).value === expected, {}, before )
-    }
-    await click_text( page, `button`, `Today` )
+    // Jumping anywhere lands on the closest day with entries, and Latest undoes it
+    await choose_date( page, `2000-01-02` )
+    await page.waitForFunction( () => document.body.textContent.includes( `Showing the closest day` ) )
+    assert.equal( new URL( page.url() ).searchParams.get( `date` ), `2000-01-02` )
+    await page.waitForSelector( `section[data-date]` )
+    await click_text( page, `button`, `Latest` )
+    await page.waitForFunction( () => !document.body.textContent.includes( `Showing the closest day` ) )
     await page.waitForSelector( `audio` )
-    mark( `calendar tags persisted and day arrows cross leap/month/year boundaries` )
+    mark( `calendar tags persisted and date jump lands on the closest entries` )
 
     await click_text( page, `a`, `Reflect` )
     await page.waitForSelector( `select[name=period]` )
@@ -561,6 +579,7 @@ test( `real Chrome captures, syncs, searches, and relaunches offline`, {
 
     await page.click( `button[aria-controls="app-menu"]` )
     await click_text( page, `#app-menu a`, `Settings` )
+    await page.waitForFunction( () => !document.querySelector( `#app-menu[open]` ) )
     await page.waitForSelector( `#--font-scale` )
     assert.deepEqual( await page.$$eval( `output`, elements => elements.map( element => element.value ) ), [ `100%`, `1.55×`, `0.00em` ] )
     assert.equal( await page.$$eval( `input[type=range]`, elements => elements.every( element => document.getElementById( element.getAttribute( `aria-describedby` ) )?.textContent.startsWith( `Default` ) ) ), true )
@@ -584,10 +603,16 @@ test( `real Chrome captures, syncs, searches, and relaunches offline`, {
     assert.equal( await page.$eval( menu, element => element.getAttribute( `aria-expanded` ) ), `false` )
     await page.focus( menu )
     await page.keyboard.press( `Enter` )
+    await page.waitForSelector( `#app-menu[open]` )
     await page.keyboard.press( `Tab` )
     assert.equal( await page.evaluate( () => document.activeElement.textContent ), `Settings` )
+    await new Promise( resolve => setTimeout( resolve, 400 ) )
+    assert.deepEqual( await page.$eval( `#app-menu`, element => {
+        const { height, right } = element.getBoundingClientRect()
+        return { height, right }
+    } ), { height: 844, right: 390 } )
     await page.keyboard.press( `Escape` )
-    assert.equal( await page.$eval( menu, element => element === document.activeElement ), true )
+    await page.waitForFunction( selector => document.querySelector( selector ) === document.activeElement, {}, menu )
     assert.equal( await page.$eval( menu, element => element.getAttribute( `aria-expanded` ) ), `false` )
     await click_text( page, `${ tabs } a`, `Today` )
     await page.waitForSelector( `button[aria-label="Add entry"]` )
@@ -596,6 +621,7 @@ test( `real Chrome captures, syncs, searches, and relaunches offline`, {
     await page.screenshot( { path: `artifacts/home-mobile.png`, fullPage: true } )
     await page.click( menu )
     await click_text( page, `#app-menu a`, `Settings` )
+    await page.waitForFunction( () => !document.querySelector( `#app-menu[open]` ) )
     await page.waitForSelector( `#--font-scale` )
     for( const selector of [ `#--font-scale`, `#--line-height`, `#--letter-spacing` ] ) {
         await page.focus( selector )
@@ -615,6 +641,7 @@ test( `real Chrome captures, syncs, searches, and relaunches offline`, {
     }
     await page.click( menu )
     await click_text( page, `#app-menu a`, `Settings` )
+    await page.waitForFunction( () => !document.querySelector( `#app-menu[open]` ) )
     await page.waitForSelector( `#--font-scale` )
     for( const label of [ `text size`, `line spacing`, `letter spacing` ] ) {
         await page.click( `button[aria-label="Reset ${ label }"]` )

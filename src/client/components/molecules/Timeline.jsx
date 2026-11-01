@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from "react"
 import { CloudOff, Pencil, RotateCcw, Trash2 } from "lucide-react"
 import toast from "react-hot-toast"
-import { Link } from "react-router-dom"
 import styled from "styled-components"
 
 import { api } from "../../modules/api/client.js"
@@ -26,6 +25,9 @@ const Item = styled.li`
   border: 1px solid var(--border);
   border-radius: .75rem;
   padding: 1rem 1.25rem;
+
+  /* Clear the sticky jump bar when linked from search */
+  scroll-margin-top: 7rem;
 
   /* Short, capped stagger for arriving items */
   &:nth-child(2) { animation-delay: 40ms; }
@@ -115,6 +117,11 @@ function local_sync_state( item ) {
     return item.local_recording.status
 }
 
+// Safe on the server and transcribed is the normal end state; a feed only flags exceptions
+function settled( item ) {
+    return item.remote_present === true && !item.local_recording?.local_present && transcription_state( item ) === `complete`
+}
+
 /**
  * Edit a note or transcript. A failed save keeps the text and offers retry.
  *
@@ -196,9 +203,7 @@ export function Timeline( {
         ? <EmptyState heading="This day could not be loaded" icon={ CloudOff }>
             Try again when the server is available.
         </EmptyState>
-        : <EmptyState action={ <Link to="/">Record an entry</Link> } artwork heading="No entries yet">
-            Your day can start with one thought.
-        </EmptyState>
+        : null
 
     async function remove( item ) {
 
@@ -239,12 +244,12 @@ export function Timeline( {
     return <>
         <List>{ timeline_items.map( item => <Item id={ `item-${ item.id }` } key={ item.id }>
             <time dateTime={ item.capture.utc }>
-                { new Date( item.capture.utc ).toLocaleTimeString( [], { hour: `2-digit`, minute: `2-digit` } ) }
+                { new Date( item.capture.utc ).toLocaleTimeString( [], { hour: `numeric`, minute: `2-digit` } ) }
             </time>
-            { item.type === `audio` && <RecordingStates aria-label="Recording state">
-                <Status value={ item.local_recording?.local_present ? `local_present` : `local_absent` } />
+            { item.type === `audio` && !settled( item ) && <RecordingStates aria-label="Recording state">
+                { item.local_recording?.local_present && <Status value="local_present" /> }
                 <Status value={ remote_state( item ) } />
-                <Status value={ transcription_state( item ) } />
+                { transcription_state( item ) !== `complete` && <Status value={ transcription_state( item ) } /> }
                 { item.remote_present !== true && <Status value={ local_sync_state( item ) } /> }
             </RecordingStates> }
             { item.type === `text` && <p>{ item.text }</p> }
