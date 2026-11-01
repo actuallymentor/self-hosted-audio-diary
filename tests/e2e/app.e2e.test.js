@@ -687,7 +687,9 @@ test( `real Chrome captures, syncs, searches, and relaunches offline`, {
     await click_text( page, `button`, `Record` )
     await new Promise( resolve => setTimeout( resolve, 1_000 ) )
     await click_text( page, `button`, `Stop` )
-    await page.waitForFunction( () => document.body.textContent.includes( `Saved on this device` ) )
+
+    // A failed offline sync can flip saved to retrying within one frame; both mean durable
+    await page.waitForFunction( () => [ `Saved on this device`, `Saved here` ].some( label => document.body.textContent.includes( label ) ) )
     mark( `offline recording durable locally` )
     await click_text( page, `a`, `Calendar` )
     await page.waitForFunction( () => [ ...document.querySelectorAll( `li` ) ].some( item =>
